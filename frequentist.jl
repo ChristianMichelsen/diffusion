@@ -1,30 +1,6 @@
-using Glob: glob
-using NaturalSort: natural
-using DataFrames:
-    DataFrame,
-    select,
-    select!,
-    groupby,
-    groupindices,
-    transform,
-    combine,
-    groupcols,
-    disallowmissing!,
-    disallowmissing,
-    nrow,
-    SubDataFrame,
-    GroupedDataFrame
-import CSV
-# using Pipe: @pipe
-using Chain: @chain
-using Optim: optimize, TwiceDifferentiable, Optim, hessian!
+
 using OrderedCollections: LittleDict
-using LinearAlgebra: diag
-using StatsBase: StatsBase, cov2cor, mean, std
 using PyFormattedStrings
-import Polynomials
-using Distributions: Rayleigh, fit_mle, MixtureModel, logpdf, pdf
-using CairoMakie
 
 ##
 
@@ -109,7 +85,7 @@ fit_WT1_MSD = fit(χ²_closure, f_MSD, p0_MSD, lower_MSD, upper_MSD)
 R_inf_WT1 = sqrt(2) * fit_WT1_MSD.μ[1]
 DCon1_WT1 = fit_WT1_MSD.μ[2]
 
-fx_WT1 = Polynomials.fit(xM[1:3], df_MSD_WT1[1:3, "mean"], 1)
+fx_WT1 = fit_polynomial(xM[1:3], df_MSD_WT1[1:3, "mean"], 1)
 DCon2_WT1 = fx_WT1[1] / 2.0
 
 println(f"DCon1_WT1 = {DCon1_WT1:.4f}")
@@ -126,7 +102,7 @@ Derr_focus = fit_focus.σ[1]
 
 df_MSD_focus = compute_MSD(focus_files, L_MAX, Din_focus, Derr_focus)
 
-fx_focus = Polynomials.fit(xM[1:3], df_MSD_focus[1:3, "mean"], 1)
+fx_focus = fit_polynomial(xM[1:3], df_MSD_focus[1:3, "mean"], 1)
 Db_focus = fx_focus[1] / 2.0
 println(f"Db_focus = {Db_focus:.4f}")
 

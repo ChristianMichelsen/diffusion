@@ -1,4 +1,13 @@
 
+using Optim: optimize, TwiceDifferentiable, Optim, hessian!
+using LinearAlgebra: diag
+import Polynomials
+using StatsBase: StatsBase, cov2cor, mean, std
+using CairoMakie
+
+
+##
+
 function diffusion_nll_1D(Δ, d)
     # return Δ / (2 * d * τ) * exp(-(Δ^2) / (4 * d * τ))
     distribution = diffusion_1D(d)
@@ -117,3 +126,7 @@ function plot_and_fit(Δ, name, color)
 
 end
 
+function fit_polynomial(x, y, order = 1)
+    fx = Polynomials.fit(x, y, order)
+    return fx
+end
