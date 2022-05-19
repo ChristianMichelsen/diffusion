@@ -179,7 +179,7 @@ function get_variables_in_group(chains::Turing.Chains, variable::Union{Symbol,St
 end
 
 
-function plot_chains(chains::Turing.Chains, resolution = (1_000, 1200); variables = nothing)
+function plot_chains(chains::Turing.Chains; variables = nothing, resolution = (1_000, 1200))
 
     if isnothing(variables)
         variables = names(chains, :parameters)
