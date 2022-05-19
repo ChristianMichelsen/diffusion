@@ -1,34 +1,170 @@
 import ColorSchemes
 using Turing: MCMCThreads
+using HDF5: h5open
+using MCMCChainsStorage
+import Random
+import Logging
 
 
-function initialize_fit(; model, alg = NUTS(0.65), N_samples = 1000, N_chains = 1)
-    d_fit =
-        Dict(:model => model, :alg => alg, :N_samples => N_samples, :N_chains => N_chains)
-    return d_fit
+function get_unique_name(model_name::String, N_samples::Int, N_chains::Int = 1)
+    return f"{model_name}__{N_samples}__samples__{N_chains}__chains"
 end
 
 
-function fit!(d_fit::Dict)
+function run_inference(model, alg, N_samples, N_chains)
 
-    if d_fit[:N_chains] == 1
-        chains = sample(d_fit[:model], d_fit[:alg], d_fit[:N_samples])
+    if N_chains == 1
+        return Turing.sample(model, alg, N_samples)
     else
-        chains = sample(
-            d_fit[:model],
-            d_fit[:alg],
-            MCMCThreads(),
-            d_fit[:N_samples],
-            d_fit[:N_chains],
-        )
+        return Turing.sample(model, alg, MCMCThreads(), N_samples, N_chains)
     end
 
-    d_fit[:chains] = chains
 end
 
-function get_chains(d_fit::Dict)
-    return d_fit[:chains]
+function get_chains(;
+    name::String,
+    model::Turing.AbstractMCMC.AbstractModel,
+    alg::Turing.Inference.InferenceAlgorithm = NUTS(0.65),
+    N_samples::Int = 1000,
+    N_chains::Int = 1,
+    forced::Bool = false,
+    hide_warnings::Bool = false,
+    merge_chains::Bool = true,
+)
+
+    model_name = get_unique_name(name, N_samples, N_chains)
+    filename = f"chains/{model_name}.h5"
+
+    if isfile(filename) && !forced
+        println(f"Loading {name}")
+        chains = h5open(filename, "r") do f
+            read(f, Turing.Chains)
+        end
+        return chains
+
+    else
+
+        println(f"Running Bayesian inference on {name}, please wait.")
+        Random.seed!(1)
+
+
+        if !hide_warnings
+            chains = run_inference(model, alg, N_samples, N_chains)
+        else
+            logger = Logging.SimpleLogger(Logging.Error)
+            chains = Logging.with_logger(logger) do
+                run_inference(model, alg, N_samples, N_chains)
+            end
+        end
+
+        if merge_chains
+            chains = get_merged_chains(model, chains)
+        end
+
+        println(f"Saving {name}")
+        h5open(filename, "w") do f
+            write(f, chains)
+        end
+
+        return chains
+
+    end
+
 end
+
+
+##
+
+function get_generated_quantities(model::Turing.Model, chains::Turing.Chains)
+    chains_params = Turing.MCMCChains.get_sections(chains, :parameters)
+    generated_quantities = Turing.generated_quantities(model, chains_params)
+    return generated_quantities
+end
+
+
+function get_generated_quantities(dict::Dict)
+    return get_generated_quantities(dict[:model], dict[:chains])
+end
+
+
+""" Get the number of dimensions (K) for the specific variable """
+function get_K(dict::Dict, variable::Union{Symbol,String})
+    K = length(first(dict[:generated_quantities])[variable])
+    return K
+end
+
+
+function get_variables(dict::Dict)
+    return dict[:generated_quantities] |> first |> keys
+end
+
+
+function get_N_samples(dict::Dict)
+    return length(dict[:chains])
+end
+
+
+function get_N_chains(dict::Dict)
+    return length(Turing.chains(dict[:chains]))
+end
+
+
+function generated_quantities_to_chain(dict::Dict, variable::Union{Symbol,String})
+
+    K = get_K(dict, variable)
+
+    matrix = zeros(dict[:N_samples], K, dict[:N_chains])
+    for chain = 1:dict[:N_chains]
+        for (i, xi) in enumerate(dict[:generated_quantities][:, chain])
+            matrix[i, :, chain] .= xi[variable]
+        end
+    end
+
+    if K == 1
+        chain_names = [Symbol("$variable")]
+    else
+        chain_names = [Symbol("$variable[$i]") for i = 1:K]
+    end
+    generated_chain = Turing.Chains(matrix, chain_names, info = dict[:chains].info)
+
+    return generated_chain
+
+end
+
+
+function generated_quantities_to_chains(dict::Dict)
+    return hcat(
+        [generated_quantities_to_chain(dict, variable) for variable in dict[:variables]]...,
+    )
+end
+
+
+function merge_generated_chains(dict::Dict)
+    return hcat(
+        dict[:chains],
+        Turing.setrange(dict[:generated_chains], range(dict[:chains])),
+    )
+end
+
+
+function get_merged_chains(model::Turing.Model, chains::Turing.Chains)
+
+    dict = Dict{Symbol,Any}(:model => model, :chains => chains)
+
+    dict[:generated_quantities] = get_generated_quantities(dict)
+    dict[:variables] = get_variables(dict)
+    dict[:N_samples] = get_N_samples(dict)
+    dict[:N_chains] = get_N_chains(dict)
+
+    dict[:generated_chains] = generated_quantities_to_chains(dict)
+    return merge_generated_chains(dict)
+
+end
+
+
+
+
+##
 
 function get_colors()
     names = ["red", "blue", "green", "purple", "orange", "yellow", "brown", "pink", "grey"]
@@ -38,9 +174,16 @@ function get_colors()
 end
 
 
-function plot_chains(chains::Turing.MCMCChains.Chains, resolution = (1_000, 1200))
+function get_variables_in_group(chains::Turing.Chains, variable::Union{Symbol,String})
+    return namesingroup(chains, variable)
+end
 
-    params = names(chains, :parameters)
+
+function plot_chains(chains::Turing.Chains, resolution = (1_000, 1200); variables = nothing)
+
+    if isnothing(variables)
+        variables = names(chains, :parameters)
+    end
 
     colors = get_colors()
     n_chains = length(Turing.chains(chains))
@@ -49,25 +192,28 @@ function plot_chains(chains::Turing.MCMCChains.Chains, resolution = (1_000, 1200
     fig = Figure(; resolution = resolution)
 
     # left part of the plot // traces
-    for (i, param) in enumerate(params)
-        ax = Axis(fig[i, 1]; ylabel = string(param))
+    for (i, variable) in enumerate(variables)
+        ax = Axis(fig[i, 1]; ylabel = string(variable))
         for chain = 1:n_chains
-            values = chains[:, param, chain]
+            values = chains[:, variable, chain]
             lines!(ax, 1:n_samples, values; label = string(chain))
         end
 
-        if i == length(params)
+        if i == length(variables)
             ax.xlabel = "Iteration"
         end
 
     end
 
     # right part of the plot // density
-    for (i, param) in enumerate(params)
-        ax =
-            Axis(fig[i, 2]; ylabel = string(param), limits = (nothing, nothing, 0, nothing))
+    for (i, variable) in enumerate(variables)
+        ax = Axis(
+            fig[i, 2];
+            ylabel = string(variable),
+            limits = (nothing, nothing, 0, nothing),
+        )
         for chain = 1:n_chains
-            values = chains[:, param, chain]
+            values = chains[:, variable, chain]
             density!(
                 ax,
                 values;
@@ -79,18 +225,12 @@ function plot_chains(chains::Turing.MCMCChains.Chains, resolution = (1_000, 1200
         end
 
         hideydecorations!(ax, grid = false)
-        ax.title = string(param)
-        if i == length(params)
+        ax.title = string(variable)
+        if i == length(variables)
             ax.xlabel = "Parameter estimate"
         end
     end
 
     return fig
 
-end
-
-
-function plot_chains(d_fit::Dict, resolution = (1_000, 1200))
-    chains = get_chains(d_fit)
-    return plot_chains(chains, resolution)
 end
