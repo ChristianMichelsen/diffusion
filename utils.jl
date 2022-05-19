@@ -115,7 +115,7 @@ end
 
 function diffusion_2D(d1, d2, f)
     prior = [f, 1 - f]
-    rayleighs = [Rayleigh(d_to_σ(d)) for d in [d1, d2]]
+    rayleighs = [diffusion_1D(d) for d in [d1, d2]]
     distribution = MixtureModel(rayleighs, prior)
     return distribution
 end

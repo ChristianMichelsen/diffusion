@@ -19,14 +19,6 @@ const xM = collect(range(τ, τ * L_MAX, L_MAX))
 ##
 
 
-d_p0 = LittleDict("d1" => 0.04, "d2" => 0.16, "f" => 0.6)
-d_lower = LittleDict("d1" => 0.0, "d2" => 0.0, "f" => 0.0)
-d_upper = LittleDict("d1" => 10.0, "d2" => 10.0, "f" => 1.0)
-
-
-##
-
-
 # We have three potential candicates for the WT list
 WT1_files = get_list(
     "Sir3-Halo-WT_Single_Molecules_Data_Set_04/Sir3-Halo-WT_Single_Molecules_Data_Set_04",
@@ -60,6 +52,11 @@ df_delta = load_cells(delta_files)
 ##
 
 
+d_p0 = LittleDict("d1" => 0.04, "d2" => 0.16, "f" => 0.6)
+d_lower = LittleDict("d1" => 0.0, "d2" => 0.0, "f" => 0.0)
+d_upper = LittleDict("d1" => 10.0, "d2" => 10.0, "f" => 1.0)
+
+##
 
 fit_WT1 =
     fit(make_closure(Δ_WT1, diffusion_nll_2D), diffusion_nll_2D, d_p0, d_lower, d_upper)
