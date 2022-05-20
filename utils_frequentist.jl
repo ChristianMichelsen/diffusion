@@ -1,9 +1,7 @@
 
 using Optim: optimize, TwiceDifferentiable, Optim, hessian!
 using LinearAlgebra: diag
-import Polynomials
 using StatsBase: StatsBase, cov2cor, mean, std
-using CairoMakie
 
 
 ##
@@ -70,11 +68,6 @@ end
 
 
 
-function f_MSD(xM, R_inf, d, σ)
-    return 4 * σ^2 + R_inf^2 * (1 - exp(-4 * d * xM / R_inf^2))
-end
-
-
 function make_χ²_closure(xM, y, err, func)
     return p -> sum(@. ((func(xM, p...) - y)^2 / err^2))
 end
@@ -124,9 +117,4 @@ function plot_and_fit(Δ, name, color)
 
     return fig
 
-end
-
-function fit_polynomial(x, y, order = 1)
-    fx = Polynomials.fit(x, y, order)
-    return fx
 end

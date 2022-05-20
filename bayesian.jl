@@ -1,5 +1,10 @@
 
 using PyFormattedStrings: @f_str
+using StatsBase: mean, std, median
+using Distributions: Normal
+using MCMCChains: corner
+using StatsPlots
+import CairoMakie
 
 include("utils.jl")
 
@@ -11,6 +16,7 @@ const L_MAX = 10
 
 const N_samples = 1000
 const N_chains = 4
+const xM = collect(range(τ, L_MAX * τ, L_MAX))
 
 
 ##
@@ -37,6 +43,8 @@ df_WT3 = load_cells(WT3_files)
 df_focus = load_cells(focus_files)
 df_rad = load_cells(rad_files)
 df_delta = load_cells(delta_files)
+
+
 
 df_Δ_WT1 = compute_dist(df_WT1)
 df_Δ_WT2 = compute_dist(df_WT2)
@@ -89,33 +97,146 @@ chains_WT1_2D_simple = get_chains(
 )
 
 variables = [get_variables_in_group(chains_WT1_2D_simple, :ds)..., :Θ]
-plot_chains(chains_WT1_2D_simple; variables = variables)
-
-
-chains_WT1_2D_simple[:, variables, :]
-
-
-###
+fig_WT1_2D_simple = plot_chains(chains_WT1_2D_simple; variables = variables)
+save("figs/WT1_2D_simple.pdf", fig_WT1_2D_simple)
 
 
 
-function get_good_groups(df_Δ, min_seq_length = 100)
+# chains_WT1_2D_simple[variables]
 
-    good_groups = @chain begin
-        df_Δ
-        groupby(:group)
-        combine(nrow)
-        filter(:nrow => >(min_seq_length), _)
-        select(:group)
+Din_WT1 = mean(chains_WT1_2D_simple[Symbol("ds[1]")])
+Derr_WT1 = std(chains_WT1_2D_simple[Symbol("ds[1]")])
+
+println(f"Din_WT1 = {Din_WT1:.4f}")
+println(f"Derr_WT1 = {Derr_WT1:.4f}")
+
+##
+
+df_MSD_WT1 = compute_MSD(WT1_files, L_MAX, Din_WT1, Derr_WT1)
+
+
+@model function diffusion_MSD(x, y, sy)
+
+    R_inf ~ Exponential(0.1)
+    d ~ Uniform(0, 1)
+    σ ~ Uniform(0, 1)
+
+    for i = 1:length(x)
+        ỹ = f_MSD(x[i], R_inf, d, σ)
+        y[i] ~ Normal(ỹ, sy[i])
     end
 
-    df_Δ_good_groups = filter(row -> row.group in good_groups.group, df_Δ)
-
-    return df_Δ_good_groups
 end
 
-df_Δ_WT1_good_groups = get_good_groups(df_Δ_WT1, 100)
-# Δ, group = df_Δ_WT1_good_groups.Δ, df_Δ_WT1_good_groups.group
+chains_WT1_MSD = get_chains(
+    name = "WT1_MSD",
+    model = diffusion_MSD(xM, df_MSD_WT1[:, "mean"], df_MSD_WT1[:, "sdom"]),
+    N_samples = N_samples,
+    N_chains = N_chains,
+    # hide_warnings = true,
+)
+fig_WT1_MSD = plot_chains(chains_WT1_MSD)
+save("figs/WT1_MSD.pdf", fig_WT1_MSD)
+
+
+R_inf_WT1 = sqrt(2) * mean(chains_WT1_MSD[:R_inf])
+DCon1_WT1 = mean(chains_WT1_MSD[:d])
+
+fx_WT1 = fit_polynomial(xM[1:3], df_MSD_WT1[1:3, "mean"], 1)
+DCon2_WT1 = fx_WT1[1] / 2.0
+println(f"DCon1_WT1 = {DCon1_WT1:.4f}")
+println(f"DCon2_WT1 = {DCon2_WT1:.4f}")
+
+fig_WT1_MSD_corner = corner(chains_WT1_MSD)
+save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
+
+
+########
+
+chains_focus_2D_simple = get_chains(
+    name = "focus_2D_simple",
+    model = diffusion_2D_simple(df_Δ_focus.Δ),
+    N_samples = N_samples,
+    N_chains = N_chains,
+    hide_warnings = true,
+)
+
+variables = [get_variables_in_group(chains_focus_2D_simple, :ds)..., :Θ]
+fig_focus_2D_simple = plot_chains(chains_focus_2D_simple; variables = variables)
+save("figs/focus_2D_simple.pdf", fig_focus_2D_simple)
+
+
+
+Din_focus = chains_focus_2D_simple[Symbol("ds[1]")]
+df_MSD_focus = compute_MSD(focus_files, L_MAX, mean(Din_focus), std(Din_focus))
+
+fx_focus = fit_polynomial(xM[1:3], df_MSD_focus[1:3, "mean"], 1)
+Db_focus = fx_focus[1] / 2.0
+println(f"Db_focus = {Db_focus:.4f}")
+
+########
+
+chains_delta_2D_simple = get_chains(
+    name = "delta_2D_simple",
+    model = diffusion_2D_simple(df_Δ_delta.Δ),
+    N_samples = N_samples,
+    N_chains = N_chains,
+    hide_warnings = true,
+)
+
+variables = [get_variables_in_group(chains_delta_2D_simple, :ds)..., :Θ]
+fig_delta_2D_simple = plot_chains(chains_delta_2D_simple; variables = variables)
+save("figs/delta_2D_simple.pdf", fig_delta_2D_simple)
+
+
+
+DoutF_delta = mean(chains_delta_2D_simple[Symbol("ds[2]")])
+
+########
+
+chains_WT2_2D_simple = get_chains(
+    name = "WT2_2D_simple",
+    model = diffusion_2D_simple(df_Δ_WT2.Δ),
+    N_samples = N_samples,
+    N_chains = N_chains,
+    hide_warnings = true,
+)
+
+variables = [get_variables_in_group(chains_WT2_2D_simple, :ds)..., :Θ]
+fig_WT2_2D_simple = plot_chains(chains_WT2_2D_simple; variables = variables)
+save("figs/WT2_2D_simple.pdf", fig_WT2_2D_simple)
+
+
+Din_WT2 = mean(chains_WT2_2D_simple[Symbol("ds[1]")])
+Derr_WT2 = std(chains_WT2_2D_simple[Symbol("ds[1]")])
+
+#####
+
+
+
+U_left = compute_U_left(chains_WT1_2D_simple)
+U_right = compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
+
+println("U_{left}=", U_left)
+println("U_{right}=", U_right)
+
+
+
+
+
+
+
+
+
+
+
+#######
+
+
+df_Δ_WT1_good_groups = filter(:nrow => >(100), df_Δ_WT1)
+df_Δ_WT1_good_groups
+
+unique(df_Δ_WT1_good_groups[:, [:group, :id, :cell]])
 
 
 @model function diffusion_2D_groups(Δ, group)
@@ -162,6 +283,35 @@ variables = [
     get_variables_in_group(chains_WT1_2D_groups, :ds)...,
     get_variables_in_group(chains_WT1_2D_groups, :Θ)...,
 ]
+
+plot_chains(chains_WT1_2D_groups; variables = variables[begin:begin+5])
+
 fig_WT1_2D_groups_100 =
     plot_chains(chains_WT1_2D_groups; variables = variables, resolution = (1000, 10000))
-# save("test.pdf", fig_WT1_2D_groups_100)
+save("figs/WT1_2D_groups_100.pdf", fig_WT1_2D_groups_100)
+
+
+##
+
+
+# chains = chains_WT1_2D_groups
+
+function compute_d_combined!(d_combined, ds, Θ)
+    for i in eachindex(Θ)
+        d_combined[i] = ds[i, 1] * Θ[i] + ds[i, 2] * (1 - Θ[i])
+    end
+end
+
+function compute_d_combined(chains::Turing.Chains)
+    ds = Array(chains[get_variables_in_group(chains, :ds)])
+    Θs = Array(chains[get_variables_in_group(chains, :Θ)])
+    d_combined = zeros(eltype(Θs), size(Θs))
+    for i in axes(Θs, 2)
+        compute_d_combined!(view(d_combined, :, i), ds, view(Θs, :, i))
+    end
+    return d_combined
+end
+
+d_combined_WT1_2D_groups = compute_d_combined(chains_WT1_2D_groups)
+
+mean(eachrow(d_combined_WT1_2D_groups)) .< 0.045876509391691855

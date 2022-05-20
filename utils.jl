@@ -4,6 +4,7 @@ import CSV
 # using Pipe: @pipe
 using Chain: @chain
 using Distributions: Rayleigh, fit_mle, MixtureModel, logpdf, pdf
+import Polynomials
 using DataFrames:
     DataFrame,
     select,
@@ -86,7 +87,12 @@ end
 
 
 function compute_dist(gdf::GroupedDataFrame, k = 1)
-    return combine(gdf, [:x, :y] => ((x, y) -> compute_group_dist(x, y, k)) => :Δ)
+    return combine(
+        gdf,
+        (g -> g[begin+k:end, [:id, :cell]]),
+        nrow,
+        [:x, :y] => ((x, y) -> compute_group_dist(x, y, k)) => :Δ,
+    )
 end
 
 function compute_dist(df::DataFrame, k = 1)
@@ -189,9 +195,7 @@ function compute_MSD(files, L_MAX, Dintmp, Dstmp, Typ = 0)
 end
 
 
-
-function compute_U_left(fit_WT1)
-    pp = fit_WT1.μ[3]
+function compute_U_left(pp::Float64)
     r0 = 1.0
     h = 0.85
     Vcap = pi * h^2 / 3 * (3 * r0 - h)
@@ -202,7 +206,27 @@ function compute_U_left(fit_WT1)
     return U_left
 end
 
+function compute_U_left(fit_WT1::NamedTuple)
+    return compute_U_left(fit_WT1.μ[3])
+end
+
+
 function compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
     U_right = log((DCon2_WT1 - Db_focus) / (DoutF_delta - Db_focus))
     return U_right
+end
+
+
+##
+
+
+
+function f_MSD(xM, R_inf, d, σ)
+    return 4 * σ^2 + R_inf^2 * (1 - exp(-4 * d * xM / R_inf^2))
+end
+
+
+function fit_polynomial(x, y, order = 1)
+    fx = Polynomials.fit(x, y, order)
+    return fx
 end

@@ -152,6 +152,11 @@ function get_merged_chains(model::Turing.Model, chains::Turing.Chains)
     dict = Dict{Symbol,Any}(:model => model, :chains => chains)
 
     dict[:generated_quantities] = get_generated_quantities(dict)
+
+    if dict[:generated_quantities] isa Matrix{Nothing}
+        return chains
+    end
+
     dict[:variables] = get_variables(dict)
     dict[:N_samples] = get_N_samples(dict)
     dict[:N_chains] = get_N_chains(dict)
@@ -189,14 +194,14 @@ function plot_chains(chains::Turing.Chains; variables = nothing, resolution = (1
     n_chains = length(Turing.chains(chains))
     n_samples = length(chains)
 
-    fig = Figure(; resolution = resolution)
+    fig = CairoMakie.Figure(; resolution = resolution)
 
     # left part of the plot // traces
     for (i, variable) in enumerate(variables)
-        ax = Axis(fig[i, 1]; ylabel = string(variable))
+        ax = CairoMakie.Axis(fig[i, 1]; ylabel = string(variable))
         for chain = 1:n_chains
             values = chains[:, variable, chain]
-            lines!(ax, 1:n_samples, values; label = string(chain))
+            CairoMakie.lines!(ax, 1:n_samples, values; label = string(chain))
         end
 
         if i == length(variables)
@@ -207,14 +212,14 @@ function plot_chains(chains::Turing.Chains; variables = nothing, resolution = (1
 
     # right part of the plot // density
     for (i, variable) in enumerate(variables)
-        ax = Axis(
+        ax = CairoMakie.Axis(
             fig[i, 2];
             ylabel = string(variable),
             limits = (nothing, nothing, 0, nothing),
         )
         for chain = 1:n_chains
             values = chains[:, variable, chain]
-            density!(
+            CairoMakie.density!(
                 ax,
                 values;
                 label = string(chain),
@@ -224,7 +229,7 @@ function plot_chains(chains::Turing.Chains; variables = nothing, resolution = (1
             )
         end
 
-        hideydecorations!(ax, grid = false)
+        CairoMakie.hideydecorations!(ax, grid = false)
         ax.title = string(variable)
         if i == length(variables)
             ax.xlabel = "Parameter estimate"
@@ -233,4 +238,9 @@ function plot_chains(chains::Turing.Chains; variables = nothing, resolution = (1
 
     return fig
 
+end
+
+
+function compute_U_left(chains::Turing.Chains)
+    return compute_U_left(mean(chains[:Θ]))
 end
