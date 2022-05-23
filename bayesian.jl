@@ -17,7 +17,7 @@ const L_MAX = 10
 const N_samples = 1000
 const N_chains = 4
 const xM = collect(range(τ, L_MAX * τ, L_MAX))
-
+const min_N_rows = 10
 
 ##
 
@@ -213,7 +213,6 @@ Derr_WT2 = std(chains_WT2_2D_simple[Symbol("ds[1]")])
 #####
 
 
-
 U_left = compute_U_left(chains_WT1_2D_simple)
 U_right = compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
 
@@ -233,9 +232,8 @@ println("U_{right}=", U_right)
 #######
 
 
-df_Δ_WT1_good_groups = filter(:nrow => >(100), df_Δ_WT1)
+df_Δ_WT1_good_groups = filter(:nrow => >(min_N_rows), df_Δ_WT1)
 df_Δ_WT1_good_groups
-
 unique(df_Δ_WT1_good_groups[:, [:group, :id, :cell]])
 
 
@@ -271,7 +269,7 @@ end
 
 
 chains_WT1_2D_groups = get_chains(
-    name = "WT1_2D_groups_100",
+    name = f"WT1_2D_groups_{min_N_rows}",
     model = diffusion_2D_groups(df_Δ_WT1_good_groups.Δ, df_Δ_WT1_good_groups.group),
     N_samples = N_samples,
     N_chains = N_chains,
@@ -286,9 +284,9 @@ variables = [
 
 plot_chains(chains_WT1_2D_groups; variables = variables[begin:begin+5])
 
-fig_WT1_2D_groups_100 =
+fig_WT1_2D_groups =
     plot_chains(chains_WT1_2D_groups; variables = variables, resolution = (1000, 10000))
-save("figs/WT1_2D_groups_100.pdf", fig_WT1_2D_groups_100)
+save(f"figs/WT1_2D_groups_{min_N_rows}.pdf", fig_WT1_2D_groups)
 
 
 ##
@@ -313,5 +311,58 @@ function compute_d_combined(chains::Turing.Chains)
 end
 
 d_combined_WT1_2D_groups = compute_d_combined(chains_WT1_2D_groups)
-
 mean(eachrow(d_combined_WT1_2D_groups)) .< 0.045876509391691855
+
+
+####################
+
+df_Δ_focus_good_groups = filter(:nrow => >(min_N_rows), df_Δ_focus);
+unique(df_Δ_focus_good_groups[:, [:group, :id, :cell]])
+
+
+chains_focus_2D_groups = get_chains(
+    name = f"focus_2D_groups_{min_N_rows}",
+    model = diffusion_2D_groups(df_Δ_focus_good_groups.Δ, df_Δ_focus_good_groups.group),
+    N_samples = N_samples,
+    N_chains = N_chains,
+    # hide_warnings = true,
+)
+
+
+
+variables = [
+    get_variables_in_group(chains_focus_2D_groups, :ds)...,
+    get_variables_in_group(chains_focus_2D_groups, :Θ)...,
+]
+
+plot_chains(chains_focus_2D_groups; variables = variables[begin:begin+5])
+
+chains_focus_2D_groups[get_variables_in_group(chains_focus_2D_groups, :Θ)]
+
+
+####################
+
+df_Δ_delta_good_groups = filter(:nrow => >(min_N_rows), df_Δ_delta)
+unique(df_Δ_delta_good_groups[:, [:group, :id, :cell]])
+
+
+chains_delta_2D_groups = get_chains(
+    name = f"delta_2D_groups_{min_N_rows}",
+    model = diffusion_2D_groups(df_Δ_delta_good_groups.Δ, df_Δ_delta_good_groups.group),
+    N_samples = N_samples,
+    N_chains = N_chains,
+    # hide_warnings = true,
+)
+
+
+variables = [
+    get_variables_in_group(chains_delta_2D_groups, :ds)...,
+    get_variables_in_group(chains_delta_2D_groups, :Θ)...,
+]
+
+plot_chains(chains_delta_2D_groups; variables = variables[begin:begin+5])
+
+fig_delta_2D_groups =
+    plot_chains(chains_delta_2D_groups; variables = variables, resolution = (1000, 10000))
+save(f"figs/delta_2D_groups_{min_N_rows}.pdf", fig_delta_2D_groups)
+
