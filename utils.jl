@@ -160,7 +160,7 @@ end
 
 
 function compute_MSD(files, L_MAX, Dintmp, Dstmp, Typ = 0)
-    """extracts the MSD for the slow diffusion coefficient (if typ = 0 which is standard)"""
+    """extracts the MSD for the slow diffusion coefficient (if typ = 0, which is standard)"""
 
     squared_dists = [Float64[] for _ = 1:L_MAX]
     Ns = zeros(Int, L_MAX)
@@ -211,6 +211,41 @@ function compute_U_left(fit_WT1::NamedTuple)
 end
 
 
+function plot_U_left(U_lefts, type_str="WT1"; resolution = (1_000, 600))
+
+    n_chains = size(U_lefts, 2)
+    colors = get_colors()
+
+    fig = CairoMakie.Figure(; resolution = resolution)
+
+    μ = mean(U_lefts)
+    σ = std(U_lefts)
+    μ_sdom = sdom(U_lefts)
+
+    title = f"Density plot of U (left) for {type_str}. \n Summary: μ = {μ:.4f}, σ = {σ:.4f}, μ_sdom = {μ_sdom:.4f}"
+
+    ax = CairoMakie.Axis(
+        fig[1, 1];
+        title=title,
+        xlabel="U (left)",
+        ylabel = "Density",
+        limits = (nothing, nothing, 0, nothing),
+    )
+
+    for chain = 1:n_chains
+        CairoMakie.density!(ax, U_lefts[:, chain]; label = f"Chain {chain}", strokewidth = 3,
+        strokecolor = (colors[chain], 0.8),
+        color = (colors[chain], 0),)
+    end
+
+    CairoMakie.axislegend(ax)
+    return fig
+
+end
+
+
+##
+
 function compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
     U_right = log((DCon2_WT1 - Db_focus) / (DoutF_delta - Db_focus))
     return U_right
@@ -229,4 +264,8 @@ end
 function fit_polynomial(x, y, order = 1)
     fx = Polynomials.fit(x, y, order)
     return fx
+end
+
+function sdom(x)
+    return std(x) / sqrt(length(x))
 end

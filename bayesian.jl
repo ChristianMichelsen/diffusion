@@ -1,4 +1,3 @@
-
 using PyFormattedStrings: @f_str
 using StatsBase: mean, std, median
 using Distributions: Normal
@@ -9,6 +8,9 @@ import CairoMakie
 include("utils.jl")
 
 
+fontsize_theme = CairoMakie.Theme(fontsize = 20)
+CairoMakie.set_theme!(fontsize_theme)
+
 ##
 
 const τ = 0.02
@@ -17,7 +19,7 @@ const L_MAX = 10
 const N_samples = 1000
 const N_chains = 4
 const xM = collect(range(τ, L_MAX * τ, L_MAX))
-const min_N_rows = 10
+const min_N_rows = 100
 
 ##
 
@@ -59,7 +61,7 @@ df_Δ_delta = compute_dist(df_delta)
 using Turing: Turing, Model, @model, NUTS, filldist, arraydist, namesingroup
 using Distributions: Exponential, truncated, Uniform
 using DataFrames: levels
-using CairoMakie
+# using CairoMakie
 
 
 
@@ -98,7 +100,7 @@ chains_WT1_2D_simple = get_chains(
 
 variables = [get_variables_in_group(chains_WT1_2D_simple, :ds)..., :Θ]
 fig_WT1_2D_simple = plot_chains(chains_WT1_2D_simple; variables = variables)
-save("figs/WT1_2D_simple.pdf", fig_WT1_2D_simple)
+CairoMakie.save("figs/WT1_2D_simple.pdf", fig_WT1_2D_simple)
 
 
 
@@ -136,7 +138,7 @@ chains_WT1_MSD = get_chains(
     # hide_warnings = true,
 )
 fig_WT1_MSD = plot_chains(chains_WT1_MSD)
-save("figs/WT1_MSD.pdf", fig_WT1_MSD)
+CairoMakie.save("figs/WT1_MSD.pdf", fig_WT1_MSD)
 
 
 R_inf_WT1 = sqrt(2) * mean(chains_WT1_MSD[:R_inf])
@@ -148,7 +150,7 @@ println(f"DCon1_WT1 = {DCon1_WT1:.4f}")
 println(f"DCon2_WT1 = {DCon2_WT1:.4f}")
 
 fig_WT1_MSD_corner = corner(chains_WT1_MSD)
-save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
+CairoMakie.save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
 
 
 ########
@@ -163,7 +165,7 @@ chains_focus_2D_simple = get_chains(
 
 variables = [get_variables_in_group(chains_focus_2D_simple, :ds)..., :Θ]
 fig_focus_2D_simple = plot_chains(chains_focus_2D_simple; variables = variables)
-save("figs/focus_2D_simple.pdf", fig_focus_2D_simple)
+CairoMakie.save("figs/focus_2D_simple.pdf", fig_focus_2D_simple)
 
 
 
@@ -186,7 +188,7 @@ chains_delta_2D_simple = get_chains(
 
 variables = [get_variables_in_group(chains_delta_2D_simple, :ds)..., :Θ]
 fig_delta_2D_simple = plot_chains(chains_delta_2D_simple; variables = variables)
-save("figs/delta_2D_simple.pdf", fig_delta_2D_simple)
+CairoMakie.save("figs/delta_2D_simple.pdf", fig_delta_2D_simple)
 
 
 
@@ -204,7 +206,7 @@ chains_WT2_2D_simple = get_chains(
 
 variables = [get_variables_in_group(chains_WT2_2D_simple, :ds)..., :Θ]
 fig_WT2_2D_simple = plot_chains(chains_WT2_2D_simple; variables = variables)
-save("figs/WT2_2D_simple.pdf", fig_WT2_2D_simple)
+CairoMakie.save("figs/WT2_2D_simple.pdf", fig_WT2_2D_simple)
 
 
 Din_WT2 = mean(chains_WT2_2D_simple[Symbol("ds[1]")])
@@ -220,149 +222,9 @@ println("U_{left}=", U_left)
 println("U_{right}=", U_right)
 
 
-
-
-
-
-
-
-
-
-
-#######
-
-
-df_Δ_WT1_good_groups = filter(:nrow => >(min_N_rows), df_Δ_WT1)
-df_Δ_WT1_good_groups
-unique(df_Δ_WT1_good_groups[:, [:group, :id, :cell]])
-
-
-@model function diffusion_2D_groups(Δ, group)
-
-    groups = levels(group)
-    N_groups = length(levels(group))
-
-    # prior d
-    Δds ~ filldist(Exponential(0.1), 2)
-    ds = cumsum(Δds)
-
-    dists = [diffusion_1D(d) for d in ds]
-
-    # prior θ
-    Θ ~ filldist(Uniform(0, 1), N_groups)
-
-    for (i, g) in enumerate(groups)
-
-        group_mask = (g .== group)
-        w = [Θ[i], 1 - Θ[i]]
-
-        # mixture distribution
-        distribution = MixtureModel(dists, w)
-
-        # likelihood
-        Δ[group_mask] ~ filldist(distribution, sum(group_mask))
-
-    end
-
-    return (; ds)
-end
-
-
-chains_WT1_2D_groups = get_chains(
-    name = f"WT1_2D_groups_{min_N_rows}",
-    model = diffusion_2D_groups(df_Δ_WT1_good_groups.Δ, df_Δ_WT1_good_groups.group),
-    N_samples = N_samples,
-    N_chains = N_chains,
-    # hide_warnings = true,
-)
-
-
-variables = [
-    get_variables_in_group(chains_WT1_2D_groups, :ds)...,
-    get_variables_in_group(chains_WT1_2D_groups, :Θ)...,
-]
-
-plot_chains(chains_WT1_2D_groups; variables = variables[begin:begin+5])
-
-fig_WT1_2D_groups =
-    plot_chains(chains_WT1_2D_groups; variables = variables, resolution = (1000, 10000))
-save(f"figs/WT1_2D_groups_{min_N_rows}.pdf", fig_WT1_2D_groups)
-
-
 ##
 
-
-# chains = chains_WT1_2D_groups
-
-function compute_d_combined!(d_combined, ds, Θ)
-    for i in eachindex(Θ)
-        d_combined[i] = ds[i, 1] * Θ[i] + ds[i, 2] * (1 - Θ[i])
-    end
-end
-
-function compute_d_combined(chains::Turing.Chains)
-    ds = Array(chains[get_variables_in_group(chains, :ds)])
-    Θs = Array(chains[get_variables_in_group(chains, :Θ)])
-    d_combined = zeros(eltype(Θs), size(Θs))
-    for i in axes(Θs, 2)
-        compute_d_combined!(view(d_combined, :, i), ds, view(Θs, :, i))
-    end
-    return d_combined
-end
-
-d_combined_WT1_2D_groups = compute_d_combined(chains_WT1_2D_groups)
-mean(eachrow(d_combined_WT1_2D_groups)) .< 0.045876509391691855
-
-
-####################
-
-df_Δ_focus_good_groups = filter(:nrow => >(min_N_rows), df_Δ_focus);
-unique(df_Δ_focus_good_groups[:, [:group, :id, :cell]])
-
-
-chains_focus_2D_groups = get_chains(
-    name = f"focus_2D_groups_{min_N_rows}",
-    model = diffusion_2D_groups(df_Δ_focus_good_groups.Δ, df_Δ_focus_good_groups.group),
-    N_samples = N_samples,
-    N_chains = N_chains,
-    # hide_warnings = true,
-)
-
-
-
-variables = [
-    get_variables_in_group(chains_focus_2D_groups, :ds)...,
-    get_variables_in_group(chains_focus_2D_groups, :Θ)...,
-]
-
-plot_chains(chains_focus_2D_groups; variables = variables[begin:begin+5])
-
-chains_focus_2D_groups[get_variables_in_group(chains_focus_2D_groups, :Θ)]
-
-
-####################
-
-df_Δ_delta_good_groups = filter(:nrow => >(min_N_rows), df_Δ_delta)
-unique(df_Δ_delta_good_groups[:, [:group, :id, :cell]])
-
-
-chains_delta_2D_groups = get_chains(
-    name = f"delta_2D_groups_{min_N_rows}",
-    model = diffusion_2D_groups(df_Δ_delta_good_groups.Δ, df_Δ_delta_good_groups.group),
-    N_samples = N_samples,
-    N_chains = N_chains,
-    # hide_warnings = true,
-)
-
-
-variables = [
-    get_variables_in_group(chains_delta_2D_groups, :ds)...,
-    get_variables_in_group(chains_delta_2D_groups, :Θ)...,
-]
-
-plot_chains(chains_delta_2D_groups; variables = variables[begin:begin+5])
-
-fig_delta_2D_groups =
-    plot_chains(chains_delta_2D_groups; variables = variables, resolution = (1000, 10000))
-save(f"figs/delta_2D_groups_{min_N_rows}.pdf", fig_delta_2D_groups)
+U_lefts = compute_U_left.(chains_WT1_2D_simple[:Θ])
+fig_U_left = plot_U_left(U_lefts)
+CairoMakie.save("figs/U_left.pdf", fig_U_left)
 
