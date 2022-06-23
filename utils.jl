@@ -5,6 +5,7 @@ import CSV
 using Chain: @chain
 using Distributions: Rayleigh, fit_mle, MixtureModel, logpdf, pdf
 import Polynomials
+using LinearAlgebra: I
 using DataFrames:
     DataFrame,
     select,
@@ -211,7 +212,7 @@ function compute_U_left(fit_WT1::NamedTuple)
 end
 
 
-function plot_U_left(U_lefts, type_str="WT1"; resolution = (1_000, 600))
+function plot_U_direction(U_lefts, direction; resolution = (1_000, 600))
 
     n_chains = size(U_lefts, 2)
     colors = get_colors()
@@ -222,20 +223,26 @@ function plot_U_left(U_lefts, type_str="WT1"; resolution = (1_000, 600))
     σ = std(U_lefts)
     μ_sdom = sdom(U_lefts)
 
-    title = f"Density plot of U (left) for {type_str}. \n Summary: μ = {μ:.4f}, σ = {σ:.4f}, μ_sdom = {μ_sdom:.4f}"
+    title =
+        f"Density plot of U ({direction}). \n Summary: μ = {μ:.4f}, σ = {σ:.4f}, μ_sdom = {μ_sdom:.4f}"
 
     ax = CairoMakie.Axis(
         fig[1, 1];
-        title=title,
-        xlabel="U (left)",
+        title = title,
+        xlabel = f"U ({direction})",
         ylabel = "Density",
         limits = (nothing, nothing, 0, nothing),
     )
 
     for chain = 1:n_chains
-        CairoMakie.density!(ax, U_lefts[:, chain]; label = f"Chain {chain}", strokewidth = 3,
-        strokecolor = (colors[chain], 0.8),
-        color = (colors[chain], 0),)
+        CairoMakie.density!(
+            ax,
+            U_lefts[:, chain];
+            label = f"Chain {chain}",
+            strokewidth = 3,
+            strokecolor = (colors[chain], 0.8),
+            color = (colors[chain], 0),
+        )
     end
 
     CairoMakie.axislegend(ax)
@@ -254,18 +261,63 @@ end
 
 ##
 
-
-
 function f_MSD(xM, R_inf, d, σ)
     return 4 * σ^2 + R_inf^2 * (1 - exp(-4 * d * xM / R_inf^2))
 end
 
 
-function fit_polynomial(x, y, order = 1)
-    fx = Polynomials.fit(x, y, order)
-    return fx
-end
+# function fit_polynomial(x, y, order = 1)
+#     fx = Polynomials.fit(x, y, order)
+#     return fx
+# end
 
 function sdom(x)
     return std(x) / sqrt(length(x))
+end
+
+
+##
+
+function plot_Us(Us, directions; resolution = (1_000, 600))
+
+    N_Us = size(Us, 1)
+    colors = get_colors()
+
+    fig = CairoMakie.Figure(; resolution = resolution)
+
+    # μ = mean(U_lefts)
+    # σ = std(U_lefts)
+    # μ_sdom = sdom(U_lefts)
+
+    title = "Density plots of Us"
+
+    ax = CairoMakie.Axis(
+        fig[1, 1];
+        title = title,
+        xlabel = "U",
+        ylabel = "Density",
+        limits = (nothing, nothing, 0, nothing),
+    )
+
+
+    for (i, U) in enumerate(Us)
+
+        U = Us[i]
+        n_chains = size(U, 2)
+
+        for chain = 1:n_chains
+            CairoMakie.density!(
+                ax,
+                U[:, chain];
+                label = directions[i],
+                strokewidth = 3,
+                strokecolor = (colors[i], 0.8),
+                color = (colors[i], 0),
+            )
+        end
+    end
+
+    CairoMakie.axislegend(ax; merge=true)
+    return fig
+
 end

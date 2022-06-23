@@ -4,9 +4,23 @@ using Distributions: Normal
 using MCMCChains: corner
 using StatsPlots
 import CairoMakie
+using Turing: Turing, Model, @model, NUTS, filldist, arraydist, namesingroup
+using Distributions: Exponential, truncated, Uniform
+using DataFrames: levels
+
+
+###############################################################################
+#
+#                    ███████ ███████ ████████ ██    ██ ██████
+#                    ██      ██         ██    ██    ██ ██   ██
+#                    ███████ █████      ██    ██    ██ ██████
+#                         ██ ██         ██    ██    ██ ██
+#                    ███████ ███████    ██     ██████  ██
+#
+###############################################################################
 
 include("utils.jl")
-
+include("utils_bayesian.jl")
 
 fontsize_theme = CairoMakie.Theme(fontsize = 20)
 CairoMakie.set_theme!(fontsize_theme)
@@ -22,6 +36,17 @@ const xM = collect(range(τ, L_MAX * τ, L_MAX))
 const min_N_rows = 100
 
 ##
+
+
+###############################################################################
+#
+#                    ██████   █████  ████████  █████
+#                    ██   ██ ██   ██    ██    ██   ██
+#                    ██   ██ ███████    ██    ███████
+#                    ██   ██ ██   ██    ██    ██   ██
+#                    ██████  ██   ██    ██    ██   ██
+#
+###############################################################################
 
 
 # We have three potential candicates for the WT list
@@ -58,36 +83,15 @@ df_Δ_delta = compute_dist(df_delta)
 
 ##
 
-using Turing: Turing, Model, @model, NUTS, filldist, arraydist, namesingroup
-using Distributions: Exponential, truncated, Uniform
-using DataFrames: levels
-# using CairoMakie
-
-
-
-include("utils_bayesian.jl")
-
-
-@model function diffusion_2D_simple(Δ)
-
-    # prior d
-    Δds ~ filldist(Exponential(0.1), 2)
-    ds = cumsum(Δds)
-
-    dists = [diffusion_1D(d) for d in ds]
-
-    # prior θ
-    Θ ~ Uniform(0, 1)
-    w = [Θ, 1 - Θ]
-
-    # mixture distribution
-    distribution = MixtureModel(dists, w)
-
-    # likelihood
-    Δ ~ filldist(distribution, length(Δ))
-
-    return (; ds)
-end
+###############################################################################
+#
+#                        ██     ██ ████████  ██
+#                        ██     ██    ██    ███
+#                        ██  █  ██    ██     ██
+#                        ██ ███ ██    ██     ██
+#                         ███ ███     ██     ██
+#
+###############################################################################
 
 
 chains_WT1_2D_simple = get_chains(
@@ -102,10 +106,6 @@ variables = [get_variables_in_group(chains_WT1_2D_simple, :ds)..., :Θ]
 fig_WT1_2D_simple = plot_chains(chains_WT1_2D_simple; variables = variables)
 CairoMakie.save("figs/WT1_2D_simple.pdf", fig_WT1_2D_simple)
 
-
-
-# chains_WT1_2D_simple[variables]
-
 Din_WT1 = mean(chains_WT1_2D_simple[Symbol("ds[1]")])
 Derr_WT1 = std(chains_WT1_2D_simple[Symbol("ds[1]")])
 
@@ -115,20 +115,6 @@ println(f"Derr_WT1 = {Derr_WT1:.4f}")
 ##
 
 df_MSD_WT1 = compute_MSD(WT1_files, L_MAX, Din_WT1, Derr_WT1)
-
-
-@model function diffusion_MSD(x, y, sy)
-
-    R_inf ~ Exponential(0.1)
-    d ~ Uniform(0, 1)
-    σ ~ Uniform(0, 1)
-
-    for i = 1:length(x)
-        ỹ = f_MSD(x[i], R_inf, d, σ)
-        y[i] ~ Normal(ỹ, sy[i])
-    end
-
-end
 
 chains_WT1_MSD = get_chains(
     name = "WT1_MSD",
@@ -141,11 +127,24 @@ fig_WT1_MSD = plot_chains(chains_WT1_MSD)
 CairoMakie.save("figs/WT1_MSD.pdf", fig_WT1_MSD)
 
 
-R_inf_WT1 = sqrt(2) * mean(chains_WT1_MSD[:R_inf])
-DCon1_WT1 = mean(chains_WT1_MSD[:d])
+# R_inf_WT1 = sqrt(2) * mean(chains_WT1_MSD[:R_inf])
+DCon1_WT1_chains = chains_WT1_MSD[:d]
+DCon1_WT1 = mean(DCon1_WT1_chains)
 
-fx_WT1 = fit_polynomial(xM[1:3], df_MSD_WT1[1:3, "mean"], 1)
-DCon2_WT1 = fx_WT1[1] / 2.0
+chains_WT1_polynomial = get_chains(
+    name = "WT1_polynomial",
+    model = bayesian_OLS(xM[1:3], df_MSD_WT1[1:3, "mean"], df_MSD_WT1[1:3, "sdom"]),
+    N_samples = N_samples,
+    N_chains = N_chains,
+    merge_chains = false,
+)
+
+
+DCon2_WT1_chains = chains_WT1_polynomial[:a] ./ 2
+DCon2_WT1 = mean(DCon2_WT1_chains)
+
+# fx_WT1 = fit_polynomial(xM[1:3], df_MSD_WT1[1:3, "mean"], 1)
+# DCon2_WT1 = fx_WT1[1] / 2.0
 println(f"DCon1_WT1 = {DCon1_WT1:.4f}")
 println(f"DCon2_WT1 = {DCon2_WT1:.4f}")
 
@@ -153,7 +152,16 @@ fig_WT1_MSD_corner = corner(chains_WT1_MSD)
 CairoMakie.save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
 
 
-########
+###############################################################################
+#
+#                    ███████  ██████   ██████ ██    ██ ███████
+#                    ██      ██    ██ ██      ██    ██ ██
+#                    █████   ██    ██ ██      ██    ██ ███████
+#                    ██      ██    ██ ██      ██    ██      ██
+#                    ██       ██████   ██████  ██████  ███████
+#
+###############################################################################
+
 
 chains_focus_2D_simple = get_chains(
     name = "focus_2D_simple",
@@ -168,15 +176,37 @@ fig_focus_2D_simple = plot_chains(chains_focus_2D_simple; variables = variables)
 CairoMakie.save("figs/focus_2D_simple.pdf", fig_focus_2D_simple)
 
 
-
 Din_focus = chains_focus_2D_simple[Symbol("ds[1]")]
 df_MSD_focus = compute_MSD(focus_files, L_MAX, mean(Din_focus), std(Din_focus))
 
-fx_focus = fit_polynomial(xM[1:3], df_MSD_focus[1:3, "mean"], 1)
-Db_focus = fx_focus[1] / 2.0
+
+
+chains_focus_polynomial = get_chains(
+    name = "focus_polynomial",
+    model = bayesian_OLS(xM[1:3], df_MSD_focus[1:3, "mean"], df_MSD_focus[1:3, "sdom"]),
+    N_samples = N_samples,
+    N_chains = N_chains,
+    merge_chains = false,
+)
+
+Db_focus_chains = chains_focus_polynomial[:a] ./ 2
+Db_focus = mean(Db_focus_chains)
+
+# fx_focus = fit_polynomial(xM[1:3], df_MSD_focus[1:3, "mean"], 1)
+# Db_focus = fx_focus[1] / 2.0
+
 println(f"Db_focus = {Db_focus:.4f}")
 
-########
+###############################################################################
+#
+#                    ██████  ███████ ██      ████████  █████
+#                    ██   ██ ██      ██         ██    ██   ██
+#                    ██   ██ █████   ██         ██    ███████
+#                    ██   ██ ██      ██         ██    ██   ██
+#                    ██████  ███████ ███████    ██    ██   ██
+#
+###############################################################################
+
 
 chains_delta_2D_simple = get_chains(
     name = "delta_2D_simple",
@@ -191,8 +221,8 @@ fig_delta_2D_simple = plot_chains(chains_delta_2D_simple; variables = variables)
 CairoMakie.save("figs/delta_2D_simple.pdf", fig_delta_2D_simple)
 
 
-
-DoutF_delta = mean(chains_delta_2D_simple[Symbol("ds[2]")])
+DoutF_delta_chains = chains_delta_2D_simple[Symbol("ds[2]")]
+DoutF_delta = mean(DoutF_delta_chains)
 
 ########
 
@@ -225,6 +255,12 @@ println("U_{right}=", U_right)
 ##
 
 U_lefts = compute_U_left.(chains_WT1_2D_simple[:Θ])
-fig_U_left = plot_U_left(U_lefts)
+fig_U_left = plot_U_direction(U_lefts, "left")
 CairoMakie.save("figs/U_left.pdf", fig_U_left)
 
+U_rights = compute_U_right.(DCon2_WT1_chains, Db_focus_chains, DoutF_delta_chains)
+fig_U_right = plot_U_direction(U_rights, "right")
+CairoMakie.save("figs/U_right.pdf", fig_U_right)
+
+fig_Us = plot_Us([U_lefts, U_rights], ["left", "right"])
+CairoMakie.save("figs/Us.pdf", fig_Us)

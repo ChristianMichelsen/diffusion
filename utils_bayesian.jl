@@ -5,6 +5,56 @@ using MCMCChainsStorage
 import Random
 import Logging
 
+###
+
+
+@model function diffusion_2D_simple(Δ)
+
+    # prior d
+    Δds ~ filldist(Exponential(0.1), 2)
+    ds = cumsum(Δds)
+
+    dists = [diffusion_1D(d) for d in ds]
+
+    # prior θ
+    Θ ~ Uniform(0, 1)
+    w = [Θ, 1 - Θ]
+
+    # mixture distribution
+    distribution = MixtureModel(dists, w)
+
+    # likelihood
+    Δ ~ filldist(distribution, length(Δ))
+
+    return (; ds)
+end
+
+
+
+@model function diffusion_MSD(x, y, sy)
+
+    R_inf ~ Exponential(0.1)
+    d ~ Uniform(0, 1)
+    σ ~ Uniform(0, 1)
+
+    for i = 1:length(x)
+        ỹ = f_MSD(x[i], R_inf, d, σ)
+        y[i] ~ Normal(ỹ, sy[i])
+    end
+
+end
+
+
+@model function bayesian_OLS(x, y, σ)
+    # Our prior belief
+    a ~ Normal(0.1, 0.1)
+    b ~ Normal(0.1, 0.1)
+
+    y_hat = a .* x .+ b
+
+    y ~ Turing.MvNormal(y_hat, σ.^2)
+end
+
 
 function get_unique_name(model_name::String, N_samples::Int, N_chains::Int = 1)
     return f"{model_name}__{N_samples}__samples__{N_chains}__chains"
