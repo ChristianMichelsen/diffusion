@@ -27,6 +27,10 @@ CairoMakie.set_theme!(fontsize_theme)
 
 ##
 
+savefigs = true
+forced = false
+forced = true
+
 const τ = 0.02
 const L_MAX = 10
 
@@ -100,17 +104,18 @@ chains_WT1_2D_simple = get_chains(
     N_samples = N_samples,
     N_chains = N_chains,
     hide_warnings = true,
+    forced = forced,
 )
 
 variables = [get_variables_in_group(chains_WT1_2D_simple, :ds)..., :Θ]
 fig_WT1_2D_simple = plot_chains(chains_WT1_2D_simple; variables = variables)
-CairoMakie.save("figs/WT1_2D_simple.pdf", fig_WT1_2D_simple)
+savefigs && CairoMakie.save("figs/WT1_2D_simple.pdf", fig_WT1_2D_simple)
 
-Din_WT1 = mean(chains_WT1_2D_simple[Symbol("ds[1]")])
-Derr_WT1 = std(chains_WT1_2D_simple[Symbol("ds[1]")])
 
-println(f"Din_WT1 = {Din_WT1:.4f}")
-println(f"Derr_WT1 = {Derr_WT1:.4f}")
+Din_WT1_chains = chains_WT1_2D_simple[Symbol("ds[1]")]
+Din_WT1 = mean(Din_WT1_chains)
+Derr_WT1 = std(Din_WT1_chains)
+println(f"Din_WT1 = {Din_WT1:.4f} ± {Derr_WT1:.4f}")
 
 ##
 
@@ -122,14 +127,16 @@ chains_WT1_MSD = get_chains(
     N_samples = N_samples,
     N_chains = N_chains,
     # hide_warnings = true,
+    forced = forced,
 )
 fig_WT1_MSD = plot_chains(chains_WT1_MSD)
-CairoMakie.save("figs/WT1_MSD.pdf", fig_WT1_MSD)
+savefigs && CairoMakie.save("figs/WT1_MSD.pdf", fig_WT1_MSD)
 
 
 # R_inf_WT1 = sqrt(2) * mean(chains_WT1_MSD[:R_inf])
 DCon1_WT1_chains = chains_WT1_MSD[:d]
 DCon1_WT1 = mean(DCon1_WT1_chains)
+DCon1_WT1_err = std(DCon1_WT1_chains)
 
 chains_WT1_polynomial = get_chains(
     name = "WT1_polynomial",
@@ -137,19 +144,21 @@ chains_WT1_polynomial = get_chains(
     N_samples = N_samples,
     N_chains = N_chains,
     merge_chains = false,
+    forced = forced,
 )
 
 
 DCon2_WT1_chains = chains_WT1_polynomial[:a] ./ 2
 DCon2_WT1 = mean(DCon2_WT1_chains)
+DCon2_WT1_err = std(DCon2_WT1_chains)
 
 # fx_WT1 = fit_polynomial(xM[1:3], df_MSD_WT1[1:3, "mean"], 1)
 # DCon2_WT1 = fx_WT1[1] / 2.0
-println(f"DCon1_WT1 = {DCon1_WT1:.4f}")
-println(f"DCon2_WT1 = {DCon2_WT1:.4f}")
+println(f"DCon1_WT1 = {DCon1_WT1:.4f} ± {DCon1_WT1_err:.4f}")
+println(f"DCon2_WT1 = {DCon2_WT1:.4f} ± {DCon2_WT1_err:.4f}")
 
 fig_WT1_MSD_corner = corner(chains_WT1_MSD)
-CairoMakie.save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
+savefigs && CairoMakie.save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
 
 
 ###############################################################################
@@ -169,11 +178,12 @@ chains_focus_2D_simple = get_chains(
     N_samples = N_samples,
     N_chains = N_chains,
     hide_warnings = true,
+    forced = forced,
 )
 
 variables = [get_variables_in_group(chains_focus_2D_simple, :ds)..., :Θ]
 fig_focus_2D_simple = plot_chains(chains_focus_2D_simple; variables = variables)
-CairoMakie.save("figs/focus_2D_simple.pdf", fig_focus_2D_simple)
+savefigs && CairoMakie.save("figs/focus_2D_simple.pdf", fig_focus_2D_simple)
 
 
 Din_focus = chains_focus_2D_simple[Symbol("ds[1]")]
@@ -187,15 +197,18 @@ chains_focus_polynomial = get_chains(
     N_samples = N_samples,
     N_chains = N_chains,
     merge_chains = false,
+    forced = forced,
 )
 
 Db_focus_chains = chains_focus_polynomial[:a] ./ 2
 Db_focus = mean(Db_focus_chains)
+Db_focus_err = std(Db_focus_chains)
 
 # fx_focus = fit_polynomial(xM[1:3], df_MSD_focus[1:3, "mean"], 1)
 # Db_focus = fx_focus[1] / 2.0
 
-println(f"Db_focus = {Db_focus:.4f}")
+println(f"Db_focus = {Db_focus:.4f} ± {Db_focus_err:.4f}")
+
 
 ###############################################################################
 #
@@ -214,11 +227,12 @@ chains_delta_2D_simple = get_chains(
     N_samples = N_samples,
     N_chains = N_chains,
     hide_warnings = true,
+    forced = forced,
 )
 
 variables = [get_variables_in_group(chains_delta_2D_simple, :ds)..., :Θ]
 fig_delta_2D_simple = plot_chains(chains_delta_2D_simple; variables = variables)
-CairoMakie.save("figs/delta_2D_simple.pdf", fig_delta_2D_simple)
+savefigs && CairoMakie.save("figs/delta_2D_simple.pdf", fig_delta_2D_simple)
 
 
 DoutF_delta_chains = chains_delta_2D_simple[Symbol("ds[2]")]
@@ -232,35 +246,38 @@ chains_WT2_2D_simple = get_chains(
     N_samples = N_samples,
     N_chains = N_chains,
     hide_warnings = true,
+    forced = forced,
 )
 
 variables = [get_variables_in_group(chains_WT2_2D_simple, :ds)..., :Θ]
 fig_WT2_2D_simple = plot_chains(chains_WT2_2D_simple; variables = variables)
-CairoMakie.save("figs/WT2_2D_simple.pdf", fig_WT2_2D_simple)
+savefigs && CairoMakie.save("figs/WT2_2D_simple.pdf", fig_WT2_2D_simple)
 
 
-Din_WT2 = mean(chains_WT2_2D_simple[Symbol("ds[1]")])
-Derr_WT2 = std(chains_WT2_2D_simple[Symbol("ds[1]")])
+# Din_WT2 = mean(chains_WT2_2D_simple[Symbol("ds[1]")])
+# Derr_WT2 = std(chains_WT2_2D_simple[Symbol("ds[1]")])
 
 #####
 
 
-U_left = compute_U_left(chains_WT1_2D_simple)
-U_right = compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
+# U_left = compute_U_left(chains_WT1_2D_simple)
+# U_right = compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
 
-println("U_{left}=", U_left)
-println("U_{right}=", U_right)
+U_lefts = compute_U_left.(chains_WT1_2D_simple[:Θ])
+U_rights = compute_U_right.(DCon2_WT1_chains, Db_focus_chains, DoutF_delta_chains)
+
+
+println(f"U left = {mean(U_lefts):.3f} ± {std(U_lefts):.3f}")
+println(f"U right = {mean(U_rights):.3f} ± {std(U_rights):.3f}")
 
 
 ##
 
-U_lefts = compute_U_left.(chains_WT1_2D_simple[:Θ])
 fig_U_left = plot_U_direction(U_lefts, "left")
-CairoMakie.save("figs/U_left.pdf", fig_U_left)
+savefigs && CairoMakie.save("figs/U_left.pdf", fig_U_left)
 
-U_rights = compute_U_right.(DCon2_WT1_chains, Db_focus_chains, DoutF_delta_chains)
 fig_U_right = plot_U_direction(U_rights, "right")
-CairoMakie.save("figs/U_right.pdf", fig_U_right)
+savefigs && CairoMakie.save("figs/U_right.pdf", fig_U_right)
 
 fig_Us = plot_Us([U_lefts, U_rights], ["left", "right"])
-CairoMakie.save("figs/Us.pdf", fig_Us)
+savefigs && CairoMakie.save("figs/Us.pdf", fig_Us)
