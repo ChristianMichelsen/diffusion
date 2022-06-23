@@ -27,9 +27,10 @@ CairoMakie.set_theme!(fontsize_theme)
 
 ##
 
-savefigs = true
+# savefigs = true
+savefigs = false
+# forced = true
 forced = false
-forced = true
 
 const τ = 0.02
 const L_MAX = 10
