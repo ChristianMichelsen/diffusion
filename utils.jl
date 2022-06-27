@@ -6,6 +6,7 @@ using Chain: @chain
 using Distributions: Rayleigh, fit_mle, MixtureModel, logpdf, pdf
 import Polynomials
 using LinearAlgebra: I
+using PyFormattedStrings: @f_str
 using DataFrames:
     DataFrame,
     select,
@@ -115,17 +116,21 @@ function σ_to_d(σ)
 end
 
 
-function diffusion_1D(d)
+function Rayleigh_from_d(d)
     return Rayleigh(d_to_σ(d))
 end
 
+# function diffusion_1D(d)
+#     return Rayleigh(d_to_σ(d))
+# end
 
-function diffusion_2D(d1, d2, f)
-    prior = [f, 1 - f]
-    rayleighs = [diffusion_1D(d) for d in [d1, d2]]
-    distribution = MixtureModel(rayleighs, prior)
-    return distribution
-end
+
+# function diffusion_2D(d1, d2, f)
+#     prior = [f, 1 - f]
+#     rayleighs = [diffusion_1D(d) for d in [d1, d2]]
+#     distribution = MixtureModel(rayleighs, prior)
+#     return distribution
+# end
 
 ##
 

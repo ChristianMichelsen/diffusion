@@ -1,4 +1,3 @@
-using PyFormattedStrings: @f_str
 using StatsBase: mean, std, median
 using Distributions: Normal
 using MCMCChains: corner
@@ -27,10 +26,11 @@ CairoMakie.set_theme!(fontsize_theme)
 
 ##
 
-# savefigs = true
-savefigs = false
+savefigs = true
+# savefigs = false
 # forced = true
 forced = false
+do_waic_comparison = true # can be quite slow
 
 const τ = 0.02
 const L_MAX = 10
@@ -86,7 +86,6 @@ df_Δ_focus = compute_dist(df_focus)
 df_Δ_rad = compute_dist(df_rad)
 df_Δ_delta = compute_dist(df_delta)
 
-##
 
 ###############################################################################
 #
@@ -99,21 +98,20 @@ df_Δ_delta = compute_dist(df_delta)
 ###############################################################################
 
 
-chains_WT1_2D_simple = get_chains(
+fit_WT1 = Fit(
     name = "WT1_2D_simple",
     model = diffusion_2D_simple(df_Δ_WT1.Δ),
     N_samples = N_samples,
     N_chains = N_chains,
-    hide_warnings = true,
-    forced = forced,
 )
+add_chains!(fit_WT1; hide_warnings = true, forced = forced)
 
-variables = [get_variables_in_group(chains_WT1_2D_simple, :ds)..., :Θ]
-fig_WT1_2D_simple = plot_chains(chains_WT1_2D_simple; variables = variables)
+variables = get_variables_in_group(fit_WT1, (:d, :θ))
+fig_WT1_2D_simple = plot_chains(fit_WT1; variables = variables)
 savefigs && CairoMakie.save("figs/WT1_2D_simple.pdf", fig_WT1_2D_simple)
 
 
-Din_WT1_chains = chains_WT1_2D_simple[Symbol("ds[1]")]
+Din_WT1_chains = fit_WT1.chains[Symbol("d[1]")];
 Din_WT1 = mean(Din_WT1_chains)
 Derr_WT1 = std(Din_WT1_chains)
 println(f"Din_WT1 = {Din_WT1:.4f} ± {Derr_WT1:.4f}")
@@ -122,34 +120,38 @@ println(f"Din_WT1 = {Din_WT1:.4f} ± {Derr_WT1:.4f}")
 
 df_MSD_WT1 = compute_MSD(WT1_files, L_MAX, Din_WT1, Derr_WT1)
 
-chains_WT1_MSD = get_chains(
+
+fit_WT1_MSD = Fit(
     name = "WT1_MSD",
     model = diffusion_MSD(xM, df_MSD_WT1[:, "mean"], df_MSD_WT1[:, "sdom"]),
     N_samples = N_samples,
     N_chains = N_chains,
-    # hide_warnings = true,
-    forced = forced,
 )
-fig_WT1_MSD = plot_chains(chains_WT1_MSD)
+add_chains!(fit_WT1_MSD; hide_warnings = true, forced = forced)
+
+
+fig_WT1_MSD = plot_chains(fit_WT1_MSD)
 savefigs && CairoMakie.save("figs/WT1_MSD.pdf", fig_WT1_MSD)
 
+fig_WT1_MSD_corner = corner(fit_WT1_MSD.chains)
+savefigs && CairoMakie.save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
 
-# R_inf_WT1 = sqrt(2) * mean(chains_WT1_MSD[:R_inf])
-DCon1_WT1_chains = chains_WT1_MSD[:d]
+
+# R_inf_WT1 = sqrt(2) * mean(fit_WT1_MSD.chains[:R_inf])
+DCon1_WT1_chains = fit_WT1_MSD.chains[:d];
 DCon1_WT1 = mean(DCon1_WT1_chains)
 DCon1_WT1_err = std(DCon1_WT1_chains)
 
-chains_WT1_polynomial = get_chains(
+fit_WT1_polynomial = Fit(
     name = "WT1_polynomial",
     model = bayesian_OLS(xM[1:3], df_MSD_WT1[1:3, "mean"], df_MSD_WT1[1:3, "sdom"]),
     N_samples = N_samples,
     N_chains = N_chains,
-    merge_chains = false,
-    forced = forced,
 )
+add_chains!(fit_WT1_polynomial; merge_chains = false, forced = forced)
 
 
-DCon2_WT1_chains = chains_WT1_polynomial[:a] ./ 2
+DCon2_WT1_chains = fit_WT1_polynomial.chains[:a] ./ 2;
 DCon2_WT1 = mean(DCon2_WT1_chains)
 DCon2_WT1_err = std(DCon2_WT1_chains)
 
@@ -158,9 +160,19 @@ DCon2_WT1_err = std(DCon2_WT1_chains)
 println(f"DCon1_WT1 = {DCon1_WT1:.4f} ± {DCon1_WT1_err:.4f}")
 println(f"DCon2_WT1 = {DCon2_WT1:.4f} ± {DCon2_WT1_err:.4f}")
 
-fig_WT1_MSD_corner = corner(chains_WT1_MSD)
-savefigs && CairoMakie.save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
 
+if do_waic_comparison
+    df_comparison_WT1, fig_comparison_waic_WT1 = compute_and_plot_WAICs(
+        df_Δ_WT1,
+        "WT1",
+        N_samples = N_samples,
+        N_chains = N_chains,
+        hide_warnings = true,
+        forced = forced,
+    )
+
+    savefigs && CairoMakie.save("figs/WT1_comparison_waic.pdf", fig_comparison_waic_WT1)
+end
 
 ###############################################################################
 #
@@ -173,35 +185,36 @@ savefigs && CairoMakie.save("figs/WT1_MSD_corner.pdf", fig_WT1_MSD_corner)
 ###############################################################################
 
 
-chains_focus_2D_simple = get_chains(
+fit_focus = Fit(
     name = "focus_2D_simple",
     model = diffusion_2D_simple(df_Δ_focus.Δ),
     N_samples = N_samples,
     N_chains = N_chains,
-    hide_warnings = true,
-    forced = forced,
 )
+add_chains!(fit_focus; hide_warnings = true, forced = forced)
 
-variables = [get_variables_in_group(chains_focus_2D_simple, :ds)..., :Θ]
-fig_focus_2D_simple = plot_chains(chains_focus_2D_simple; variables = variables)
+
+variables = get_variables_in_group(fit_focus.chains, (:d, :θ))
+fig_focus_2D_simple = plot_chains(fit_focus; variables = variables)
 savefigs && CairoMakie.save("figs/focus_2D_simple.pdf", fig_focus_2D_simple)
 
 
-Din_focus = chains_focus_2D_simple[Symbol("ds[1]")]
+Din_focus = fit_focus.chains[Symbol("d[1]")];
 df_MSD_focus = compute_MSD(focus_files, L_MAX, mean(Din_focus), std(Din_focus))
 
 
-
-chains_focus_polynomial = get_chains(
+fit_focus_polynomial = Fit(
     name = "focus_polynomial",
     model = bayesian_OLS(xM[1:3], df_MSD_focus[1:3, "mean"], df_MSD_focus[1:3, "sdom"]),
     N_samples = N_samples,
     N_chains = N_chains,
-    merge_chains = false,
-    forced = forced,
+    # merge_chains = false,
+    # forced = forced,
 )
+add_chains!(fit_focus_polynomial; merge_chains = false, forced = forced)
 
-Db_focus_chains = chains_focus_polynomial[:a] ./ 2
+
+Db_focus_chains = fit_focus_polynomial.chains[:a] ./ 2;
 Db_focus = mean(Db_focus_chains)
 Db_focus_err = std(Db_focus_chains)
 
@@ -210,6 +223,19 @@ Db_focus_err = std(Db_focus_chains)
 
 println(f"Db_focus = {Db_focus:.4f} ± {Db_focus_err:.4f}")
 
+
+if do_waic_comparison
+    df_comparison_focus, fig_comparison_waic_focus = compute_and_plot_WAICs(
+        df_Δ_focus,
+        "focus",
+        N_samples = N_samples,
+        N_chains = N_chains,
+        hide_warnings = true,
+        forced = forced,
+    )
+
+    savefigs && CairoMakie.save("figs/focus_comparison_waic.pdf", fig_comparison_waic_focus)
+end
 
 ###############################################################################
 #
@@ -222,50 +248,95 @@ println(f"Db_focus = {Db_focus:.4f} ± {Db_focus_err:.4f}")
 ###############################################################################
 
 
-chains_delta_2D_simple = get_chains(
+fit_delta = Fit(
     name = "delta_2D_simple",
     model = diffusion_2D_simple(df_Δ_delta.Δ),
     N_samples = N_samples,
     N_chains = N_chains,
-    hide_warnings = true,
-    forced = forced,
 )
+add_chains!(fit_delta; hide_warnings = true, forced = forced)
 
-variables = [get_variables_in_group(chains_delta_2D_simple, :ds)..., :Θ]
-fig_delta_2D_simple = plot_chains(chains_delta_2D_simple; variables = variables)
+
+variables = get_variables_in_group(fit_delta.chains, (:d, :θ))
+fig_delta_2D_simple = plot_chains(fit_delta; variables = variables)
 savefigs && CairoMakie.save("figs/delta_2D_simple.pdf", fig_delta_2D_simple)
 
 
-DoutF_delta_chains = chains_delta_2D_simple[Symbol("ds[2]")]
+DoutF_delta_chains = fit_delta.chains[Symbol("d[2]")];
 DoutF_delta = mean(DoutF_delta_chains)
 
-########
 
-chains_WT2_2D_simple = get_chains(
+if do_waic_comparison
+    df_comparison_delta, fig_comparison_waic_delta = compute_and_plot_WAICs(
+        df_Δ_delta,
+        "delta",
+        N_samples = N_samples,
+        N_chains = N_chains,
+        hide_warnings = true,
+        forced = forced,
+    )
+
+    savefigs && CairoMakie.save("figs/delta_comparison_waic.pdf", fig_comparison_waic_delta)
+end
+
+###############################################################################
+#
+#                    ██     ██ ████████ ██████
+#                    ██     ██    ██         ██
+#                    ██  █  ██    ██     █████
+#                    ██ ███ ██    ██    ██
+#                     ███ ███     ██    ███████
+#
+###############################################################################
+
+
+
+fit_WT2 = Fit(
     name = "WT2_2D_simple",
     model = diffusion_2D_simple(df_Δ_WT2.Δ),
     N_samples = N_samples,
     N_chains = N_chains,
-    hide_warnings = true,
-    forced = forced,
 )
+add_chains!(fit_WT2; hide_warnings = true, forced = forced)
+# add_waic!(fit_WT2; hide_warnings = true, forced = forced)
 
-variables = [get_variables_in_group(chains_WT2_2D_simple, :ds)..., :Θ]
-fig_WT2_2D_simple = plot_chains(chains_WT2_2D_simple; variables = variables)
+
+variables = get_variables_in_group(fit_WT2.chains, (:d, :θ))
+fig_WT2_2D_simple = plot_chains(fit_WT2; variables = variables)
 savefigs && CairoMakie.save("figs/WT2_2D_simple.pdf", fig_WT2_2D_simple)
 
+# Din_WT2 = mean(fit_WT2.chains[Symbol("d[1]")])
+# Derr_WT2 = std(fit_WT2.chains[Symbol("d[1]")])
 
-# Din_WT2 = mean(chains_WT2_2D_simple[Symbol("ds[1]")])
-# Derr_WT2 = std(chains_WT2_2D_simple[Symbol("ds[1]")])
+if do_waic_comparison
+    df_comparison_WT2, fig_comparison_waic_WT2 = compute_and_plot_WAICs(
+        df_Δ_WT2,
+        "WT2",
+        N_samples = N_samples,
+        N_chains = N_chains,
+        hide_warnings = true,
+        forced = forced,
+    )
 
-#####
+    savefigs && CairoMakie.save("figs/WT2_comparison_waic.pdf", fig_comparison_waic_WT2)
+end
+
+###############################################################################
+#
+#                    ██    ██
+#                    ██    ██
+#                    ██    ██
+#                    ██    ██
+#                     ██████
+#
+###############################################################################
 
 
 # U_left = compute_U_left(chains_WT1_2D_simple)
 # U_right = compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
 
-U_lefts = compute_U_left.(chains_WT1_2D_simple[:Θ])
-U_rights = compute_U_right.(DCon2_WT1_chains, Db_focus_chains, DoutF_delta_chains)
+U_lefts = compute_U_left.(fit_WT1.chains[Symbol("θ[1]")]);
+U_rights = compute_U_right.(DCon2_WT1_chains, Db_focus_chains, DoutF_delta_chains);
 
 
 println(f"U left = {mean(U_lefts):.3f} ± {std(U_lefts):.3f}")

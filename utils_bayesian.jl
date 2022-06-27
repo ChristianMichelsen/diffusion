@@ -1,33 +1,96 @@
 import ColorSchemes
-using Turing: MCMCThreads
 using HDF5: h5open
 using MCMCChainsStorage
 import Random
 import Logging
+import ParetoSmooth
+using Distributions: Exponential, Uniform
+using Turing: Turing, @model, NUTS, filldist, MCMCThreads
+using Statistics: mean, std
+using PyFormattedStrings: @f_str
+using Parameters: @with_kw
+
+
+include("merge_chains.jl")
+import .MergeChains
+
+include("model_comparison.jl")
+import .ModelComparison
+
+# compute_waic, compute_z, compare, plot
 
 ###
+
+
+
+##
+
+
+@model function diffusion_1D_simple(Δ)
+
+    # prior d
+    d ~ Exponential(0.1)
+
+    # likelihood
+    for i = 1:length(Δ)
+        Δ[i] ~ Rayleigh_from_d(d)
+    end
+    # Δ ~ filldist(Rayleigh_from_d(d), length(Δ))
+
+    return
+end
+
+
 
 
 @model function diffusion_2D_simple(Δ)
 
     # prior d
-    Δds ~ filldist(Exponential(0.1), 2)
-    ds = cumsum(Δds)
+    Δd ~ filldist(Exponential(0.1), 2)
+    d = cumsum(Δd) # ordering
 
-    dists = [diffusion_1D(d) for d in ds]
+    dists = [Rayleigh_from_d(d_i) for d_i in d]
 
     # prior θ
-    Θ ~ Uniform(0, 1)
-    w = [Θ, 1 - Θ]
-
-    # mixture distribution
-    distribution = MixtureModel(dists, w)
+    θ₁ ~ Uniform(0, 1)
+    θ = [θ₁, 1 - θ₁]
 
     # likelihood
-    Δ ~ filldist(distribution, length(Δ))
+    for i = 1:length(Δ)
+        Δ[i] ~ MixtureModel(dists, θ)
+    end
+    # Δ ~ filldist(MixtureModel(dists, θ), length(Δ))
 
-    return (; ds)
+    return (; d, θ)
 end
+
+
+
+@model function diffusion_3D_simple(Δ)
+
+    # prior d
+    Δd ~ filldist(Exponential(0.1), 3)
+    d = cumsum(Δd) # ordering
+
+    dists = [Rayleigh_from_d(d_i) for d_i in d]
+
+    # prior θ
+    Δθ ~ filldist(Uniform(0, 1), 3)
+    # Δθ ~ filldist(Exponential(0.1), 3)
+    θ = cumsum(Δθ) # ordering
+    θ = θ / sum(θ) # normalization
+
+    # likelihood
+    for i = 1:length(Δ)
+        Δ[i] ~ MixtureModel(dists, θ)
+    end
+    # Δ ~ filldist(distribution, length(Δ))
+
+    return (; d, θ)
+
+end
+
+###
 
 
 
@@ -52,170 +115,150 @@ end
 
     y_hat = a .* x .+ b
 
-    y ~ Turing.MvNormal(y_hat, σ.^2)
+    y ~ Turing.MvNormal(y_hat, σ .^ 2)
 end
 
 
-function get_unique_name(model_name::String, N_samples::Int, N_chains::Int = 1)
-    return f"{model_name}__{N_samples}__samples__{N_chains}__chains"
+
+@with_kw mutable struct Fit
+    name::String
+    model::Turing.AbstractMCMC.AbstractModel
+    alg::Turing.Inference.InferenceAlgorithm = NUTS(0.65)
+    N_samples::Int = 1000
+    N_chains::Int = 1
+    chains = missing
+    WAIC = missing
 end
 
 
-function run_inference(model, alg, N_samples, N_chains)
+function get_chain_name(fit::Fit)
+    f"{fit.name}__{fit.N_samples}__samples__{fit.N_chains}__chains"
+end
 
-    if N_chains == 1
-        return Turing.sample(model, alg, N_samples)
+
+function get_waic_name(fit::Fit)
+    f"{fit.name}__{fit.N_samples}__samples__{fit.N_chains}__waic"
+end
+
+
+
+function run_inference(fit::Fit)
+
+    if fit.N_chains == 1
+        return Turing.sample(fit.model, fit.alg, fit.N_samples)
     else
-        return Turing.sample(model, alg, MCMCThreads(), N_samples, N_chains)
+        return Turing.sample(fit.model, fit.alg, MCMCThreads(), fit.N_samples, fit.N_chains)
     end
-
 end
 
-function get_chains(;
-    name::String,
-    model::Turing.AbstractMCMC.AbstractModel,
-    alg::Turing.Inference.InferenceAlgorithm = NUTS(0.65),
-    N_samples::Int = 1000,
-    N_chains::Int = 1,
+
+
+function add_chains!(
+    fit::Fit;
     forced::Bool = false,
     hide_warnings::Bool = false,
     merge_chains::Bool = true,
+    save_chains::Bool = true,
 )
 
-    model_name = get_unique_name(name, N_samples, N_chains)
-    filename = f"chains/{model_name}.h5"
+    chain_name = get_chain_name(fit)
+    filename = f"chains/{chain_name}.h5"
 
     if isfile(filename) && !forced
-        println(f"Loading {name}")
+        println(f"Loading chains for {fit.name}")
         chains = h5open(filename, "r") do f
             read(f, Turing.Chains)
         end
-        return chains
+        fit.chains = chains
+        return nothing
+    end
 
+    println(f"Running Bayesian inference on {fit.name}, please wait.")
+    Random.seed!(1)
+
+
+    if !hide_warnings
+        chains = run_inference(fit)
     else
-
-        println(f"Running Bayesian inference on {name}, please wait.")
-        Random.seed!(1)
-
-
-        if !hide_warnings
-            chains = run_inference(model, alg, N_samples, N_chains)
-        else
-            logger = Logging.SimpleLogger(Logging.Error)
-            chains = Logging.with_logger(logger) do
-                run_inference(model, alg, N_samples, N_chains)
-            end
+        logger = Logging.SimpleLogger(Logging.Error)
+        chains = Logging.with_logger(logger) do
+            run_inference(fit)
         end
+    end
 
-        if merge_chains
-            chains = get_merged_chains(model, chains)
-        end
+    if merge_chains
+        chains = MergeChains.merge(fit.model, chains)
+    end
 
-        println(f"Saving {name}")
+    if save_chains
+        println(f"Saving {fit.name}")
         h5open(filename, "w") do f
             write(f, chains)
         end
-
-        return chains
-
     end
 
+    fit.chains = chains
+    return nothing
+
 end
 
 
-##
 
-function get_generated_quantities(model::Turing.Model, chains::Turing.Chains)
-    chains_params = Turing.MCMCChains.get_sections(chains, :parameters)
-    generated_quantities = Turing.generated_quantities(model, chains_params)
-    return generated_quantities
+function pointwise_log_likelihoods(model::Turing.Model, chains::Turing.Chains)
+    return ParetoSmooth.pointwise_log_likelihoods(model, chains)
 end
 
 
-function get_generated_quantities(dict::Dict)
-    return get_generated_quantities(dict[:model], dict[:chains])
-end
 
+function pointwise_log_likelihoods(fit::Fit; hide_warnings::Bool = true)
 
-""" Get the number of dimensions (K) for the specific variable """
-function get_K(dict::Dict, variable::Union{Symbol,String})
-    K = length(first(dict[:generated_quantities])[variable])
-    return K
-end
-
-
-function get_variables(dict::Dict)
-    return dict[:generated_quantities] |> first |> keys
-end
-
-
-function get_N_samples(dict::Dict)
-    return length(dict[:chains])
-end
-
-
-function get_N_chains(dict::Dict)
-    return length(Turing.chains(dict[:chains]))
-end
-
-
-function generated_quantities_to_chain(dict::Dict, variable::Union{Symbol,String})
-
-    K = get_K(dict, variable)
-
-    matrix = zeros(dict[:N_samples], K, dict[:N_chains])
-    for chain = 1:dict[:N_chains]
-        for (i, xi) in enumerate(dict[:generated_quantities][:, chain])
-            matrix[i, :, chain] .= xi[variable]
+    if !hide_warnings
+        log_likelihood = ParetoSmooth.pointwise_log_likelihoods(fit.model, fit.chains)
+    else
+        logger = Logging.SimpleLogger(Logging.Error)
+        log_likelihood = Logging.with_logger(logger) do
+            ParetoSmooth.pointwise_log_likelihoods(fit.model, fit.chains)
         end
     end
 
-    if K == 1
-        chain_names = [Symbol("$variable")]
-    else
-        chain_names = [Symbol("$variable[$i]") for i = 1:K]
-    end
-    generated_chain = Turing.Chains(matrix, chain_names, info = dict[:chains].info)
-
-    return generated_chain
-
+    return log_likelihood
 end
 
 
-function generated_quantities_to_chains(dict::Dict)
-    return hcat(
-        [generated_quantities_to_chain(dict, variable) for variable in dict[:variables]]...,
-    )
-end
 
+function add_waic!(
+    fit::Fit;
+    forced::Bool = false,
+    hide_warnings::Bool = true,
+    save_waic::Bool = true,
+)
 
-function merge_generated_chains(dict::Dict)
-    return hcat(
-        dict[:chains],
-        Turing.setrange(dict[:generated_chains], range(dict[:chains])),
-    )
-end
+    waic_name = get_waic_name(fit)
+    filename = f"chains/{waic_name}.jld2"
 
-
-function get_merged_chains(model::Turing.Model, chains::Turing.Chains)
-
-    dict = Dict{Symbol,Any}(:model => model, :chains => chains)
-
-    dict[:generated_quantities] = get_generated_quantities(dict)
-
-    if dict[:generated_quantities] isa Matrix{Nothing}
-        return chains
+    if isfile(filename) && !forced
+        println(f"Loading WAIC for {fit.name}")
+        waic = ModelComparison.load(filename)
+        fit.WAIC = waic
+        return nothing
     end
 
-    dict[:variables] = get_variables(dict)
-    dict[:N_samples] = get_N_samples(dict)
-    dict[:N_chains] = get_N_chains(dict)
+    if fit.chains isa Missing
+        add_chains!(fit; hide_warnings = hide_warnings, forced = forced)
+    end
 
-    dict[:generated_chains] = generated_quantities_to_chains(dict)
-    return merge_generated_chains(dict)
+    println(f"Computing WAIC for {fit.name}")
+    log_likelihood = pointwise_log_likelihoods(fit; hide_warnings = hide_warnings)
+    waic = ModelComparison.compute_waic(log_likelihood)
 
+    if save_waic
+        println(f"Saving WAIC for {fit.name}")
+        ModelComparison.save(waic, filename)
+    end
+
+    fit.WAIC = waic
+    return nothing
 end
-
 
 
 
@@ -231,6 +274,15 @@ end
 
 function get_variables_in_group(chains::Turing.Chains, variable::Union{Symbol,String})
     return namesingroup(chains, variable)
+end
+
+function get_variables_in_group(chains::Turing.Chains, variables::Tuple)
+    return reduce(vcat, get_variables_in_group(chains, variable) for variable in variables)
+end
+
+
+function get_variables_in_group(fit::Fit, variables::Tuple)
+    return get_variables_in_group(fit.chains, variables)
 end
 
 
@@ -290,8 +342,97 @@ function plot_chains(chains::Turing.Chains; variables = nothing, resolution = (1
 
 end
 
+function plot_chains(fit::Fit; variables = nothing, resolution = (1_000, 1200))
+    return plot_chains(fit.chains; variables = variables, resolution = resolution)
+end
+
+
 
 function compute_U_left(chains::Turing.Chains)
     return compute_U_left(mean(chains[:Θ]))
 end
 
+
+function model_comparison(fits, waic_names::Vector{String})
+    return ModelComparison.compare([fit.WAIC for fit in fits], waic_names)
+end
+
+
+function plot_model_comparison(df_comparison)
+    return ModelComparison.plot(df_comparison)
+end
+
+
+
+
+function compute_WAICs_1D_2D_3D(
+    df_Δ,
+    model_names;
+    N_samples = N_samples,
+    N_chains = N_chains,
+    hide_warnings = true,
+    forced = false,
+)
+
+    fit_1D = Fit(
+        name = model_names[1],
+        model = diffusion_1D_simple(df_Δ.Δ),
+        N_samples = N_samples,
+        N_chains = N_chains,
+    )
+    add_waic!(fit_1D; hide_warnings = hide_warnings, forced = forced)
+    # fit_1D.WAIC
+
+    fit_2D = Fit(
+        name = model_names[2],
+        model = diffusion_2D_simple(df_Δ.Δ),
+        N_samples = N_samples,
+        N_chains = N_chains,
+    )
+    add_chains!(fit_2D; hide_warnings = hide_warnings, forced = forced)
+    add_waic!(fit_2D; hide_warnings = hide_warnings, forced = forced)
+    # fit_2D.WAIC
+
+
+    fit_3D = Fit(
+        name = model_names[3],
+        model = diffusion_3D_simple(df_Δ.Δ),
+        N_samples = N_samples,
+        N_chains = N_chains,
+    )
+    add_chains!(fit_3D; hide_warnings = hide_warnings, forced = forced)
+    add_waic!(fit_3D; hide_warnings = hide_warnings, forced = forced)
+
+    return fit_1D, fit_2D, fit_3D
+
+end
+
+
+function compute_and_plot_WAICs(
+    df_Δ,
+    name;
+    suffix = "simple",
+    N_samples = N_samples,
+    N_chains = N_chains,
+    hide_warnings = true,
+    forced = false,
+    ic = :waic,
+)
+
+    model_names = [f"{name}_{i}D_{suffix}" for i = 1:3]
+    fits = compute_WAICs_1D_2D_3D(
+        df_Δ,
+        model_names,
+        N_samples = N_samples,
+        N_chains = N_chains,
+        hide_warnings = hide_warnings,
+        forced = forced,
+    )
+
+    waic_names = [f"{name} {i}D" for i = 1:3]
+    df_comparison = model_comparison(fits, waic_names)
+
+    fig_comparison_waic = plot_model_comparison(df_comparison)
+    return df_comparison, fig_comparison_waic
+
+end
