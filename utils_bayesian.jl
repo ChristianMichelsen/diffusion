@@ -132,12 +132,12 @@ end
 
 
 function get_chain_name(fit::Fit)
-    f"{fit.name}__{fit.N_samples}__samples__{fit.N_chains}__chains"
+    return f"{fit.name}__{fit.N_samples}__samples__{fit.N_chains}__chains"
 end
 
 
 function get_waic_name(fit::Fit)
-    f"{fit.name}__{fit.N_samples}__samples__{fit.N_chains}__waic"
+    return f"{fit.name}__{fit.N_samples}__samples__{fit.N_chains}__waic"
 end
 
 
@@ -159,13 +159,14 @@ function add_chains!(
     hide_warnings::Bool = false,
     merge_chains::Bool = true,
     save_chains::Bool = true,
+    verbose = true,
 )
 
     chain_name = get_chain_name(fit)
     filename = f"chains/{chain_name}.h5"
 
     if isfile(filename) && !forced
-        println(f"Loading chains for {fit.name}")
+        verbose && println(f"Loading chains for {fit.name}")
         chains = h5open(filename, "r") do f
             read(f, Turing.Chains)
         end
@@ -173,7 +174,7 @@ function add_chains!(
         return nothing
     end
 
-    println(f"Running Bayesian inference on {fit.name}, please wait.")
+    verbose && println(f"Running Bayesian inference on {fit.name}, please wait.")
     Random.seed!(1)
 
 
@@ -191,7 +192,7 @@ function add_chains!(
     end
 
     if save_chains
-        println(f"Saving {fit.name}")
+        verbose && println(f"Saving {fit.name}")
         h5open(filename, "w") do f
             write(f, chains)
         end
@@ -231,13 +232,14 @@ function add_waic!(
     forced::Bool = false,
     hide_warnings::Bool = true,
     save_waic::Bool = true,
+    verbose = true,
 )
 
     waic_name = get_waic_name(fit)
     filename = f"chains/{waic_name}.jld2"
 
     if isfile(filename) && !forced
-        println(f"Loading WAIC for {fit.name}")
+        verbose && println(f"Loading WAIC for {fit.name}")
         waic = ModelComparison.load(filename)
         fit.WAIC = waic
         return nothing
@@ -247,12 +249,12 @@ function add_waic!(
         add_chains!(fit; hide_warnings = hide_warnings, forced = forced)
     end
 
-    println(f"Computing WAIC for {fit.name}")
+    verbose && println(f"Computing WAIC for {fit.name}")
     log_likelihood = pointwise_log_likelihoods(fit; hide_warnings = hide_warnings)
     waic = ModelComparison.compute_waic(log_likelihood)
 
     if save_waic
-        println(f"Saving WAIC for {fit.name}")
+        verbose && println(f"Saving WAIC for {fit.name}")
         ModelComparison.save(waic, filename)
     end
 
@@ -372,6 +374,7 @@ function compute_WAICs_1D_2D_3D(
     N_chains = N_chains,
     hide_warnings = true,
     forced = false,
+    verbose = true,
 )
 
     fit_1D = Fit(
@@ -380,7 +383,7 @@ function compute_WAICs_1D_2D_3D(
         N_samples = N_samples,
         N_chains = N_chains,
     )
-    add_waic!(fit_1D; hide_warnings = hide_warnings, forced = forced)
+    add_waic!(fit_1D; hide_warnings, forced, verbose)
     # fit_1D.WAIC
 
     fit_2D = Fit(
@@ -389,8 +392,7 @@ function compute_WAICs_1D_2D_3D(
         N_samples = N_samples,
         N_chains = N_chains,
     )
-    add_chains!(fit_2D; hide_warnings = hide_warnings, forced = forced)
-    add_waic!(fit_2D; hide_warnings = hide_warnings, forced = forced)
+    add_waic!(fit_2D; hide_warnings, forced, verbose)
     # fit_2D.WAIC
 
 
@@ -400,8 +402,7 @@ function compute_WAICs_1D_2D_3D(
         N_samples = N_samples,
         N_chains = N_chains,
     )
-    add_chains!(fit_3D; hide_warnings = hide_warnings, forced = forced)
-    add_waic!(fit_3D; hide_warnings = hide_warnings, forced = forced)
+    add_waic!(fit_3D; hide_warnings, forced, verbose)
 
     return fit_1D, fit_2D, fit_3D
 
@@ -417,16 +418,18 @@ function compute_and_plot_WAICs(
     hide_warnings = true,
     forced = false,
     ic = :waic,
+    verbose = true,
 )
 
     model_names = [f"{name}_{i}D_{suffix}" for i = 1:3]
     fits = compute_WAICs_1D_2D_3D(
         df_Δ,
-        model_names,
-        N_samples = N_samples,
-        N_chains = N_chains,
-        hide_warnings = hide_warnings,
-        forced = forced,
+        model_names;
+        N_samples,
+        N_chains,
+        hide_warnings,
+        forced,
+        verbose,
     )
 
     waic_names = [f"{name} {i}D" for i = 1:3]
