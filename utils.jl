@@ -201,6 +201,12 @@ function compute_MSD(files, L_MAX, Dintmp, Dstmp, Typ = 0)
 end
 
 
+function compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
+    U_right = log((DCon2_WT1 - Db_focus) / (DoutF_delta - Db_focus))
+    return U_right
+end
+
+
 function compute_U_left(pp::Float64)
     r0 = 1.0
     h = 0.85
@@ -215,6 +221,7 @@ end
 function compute_U_left(fit_WT1::NamedTuple)
     return compute_U_left(fit_WT1.μ[3])
 end
+
 
 
 function plot_U_direction(U_lefts, direction; resolution = (1_000, 600))
@@ -257,11 +264,6 @@ end
 
 
 ##
-
-function compute_U_right(DCon2_WT1, Db_focus, DoutF_delta)
-    U_right = log((DCon2_WT1 - Db_focus) / (DoutF_delta - Db_focus))
-    return U_right
-end
 
 
 ##

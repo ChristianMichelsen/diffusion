@@ -67,6 +67,8 @@ WT3_files = get_list("WT_L1")
 focus_files = get_list("Sir3_Halo_WT_Focus_cleaned/Sir3_Halo_WT_Focus_cropped")
 rad_files = get_list("Rad52_MathiasAllCells")
 delta_files = get_list("Sir3-Halo-Sir2DSir4D_Judith_Cleaned")
+delta_Sir2_files = get_list("Sir3-Halo-Sir2D_Judith_Cleaned")
+delta_Sir4_files = get_list("Sir3-Halo-Sir4D_Judith_Cleaned")
 
 
 df_WT1 = load_cells(WT1_files)
@@ -76,6 +78,8 @@ df_WT3 = load_cells(WT3_files)
 df_focus = load_cells(focus_files)
 df_rad = load_cells(rad_files)
 df_delta = load_cells(delta_files)
+df_delta_Sir2 = load_cells(delta_Sir2_files)
+df_delta_Sir4 = load_cells(delta_Sir4_files)
 
 
 
@@ -86,6 +90,8 @@ df_Δ_WT3 = compute_dist(df_WT3)
 df_Δ_focus = compute_dist(df_focus)
 df_Δ_rad = compute_dist(df_rad)
 df_Δ_delta = compute_dist(df_delta)
+df_Δ_delta_Sir2 = compute_dist(df_delta_Sir2)
+df_Δ_delta_Sir4 = compute_dist(df_delta_Sir4)
 
 
 ###############################################################################
@@ -115,7 +121,7 @@ savefigs && CairoMakie.save("figs/WT1_2D_simple.pdf", fig_WT1_2D_simple)
 Din_WT1_chains = fit_WT1.chains[Symbol("d[1]")];
 Din_WT1 = mean(Din_WT1_chains)
 Derr_WT1 = std(Din_WT1_chains)
-println(f"Din_WT1 = {Din_WT1:.4f} ± {Derr_WT1:.4f}")
+println(f"Din_WT1 = {Din_WT1:.5f} ± {Derr_WT1:.5f}")
 
 ##
 
@@ -158,8 +164,8 @@ DCon2_WT1_err = std(DCon2_WT1_chains)
 
 # fx_WT1 = fit_polynomial(xM[1:3], df_MSD_WT1[1:3, "mean"], 1)
 # DCon2_WT1 = fx_WT1[1] / 2.0
-println(f"DCon1_WT1 = {DCon1_WT1:.4f} ± {DCon1_WT1_err:.4f}")
-println(f"DCon2_WT1 = {DCon2_WT1:.4f} ± {DCon2_WT1_err:.4f}")
+println(f"DCon1_WT1 = {DCon1_WT1:.5f} ± {DCon1_WT1_err:.5f}")
+println(f"DCon2_WT1 = {DCon2_WT1:.7f} ± {DCon2_WT1_err:.7f}")
 
 
 if do_waic_comparison
@@ -221,7 +227,7 @@ Db_focus_err = std(Db_focus_chains)
 # fx_focus = fit_polynomial(xM[1:3], df_MSD_focus[1:3, "mean"], 1)
 # Db_focus = fx_focus[1] / 2.0
 
-println(f"Db_focus = {Db_focus:.4f} ± {Db_focus_err:.4f}")
+println(f"Db_focus = {Db_focus:.7f} ± {Db_focus_err:.7f}")
 
 
 if do_waic_comparison
@@ -265,7 +271,7 @@ savefigs && CairoMakie.save("figs/delta_2D_simple.pdf", fig_delta_2D_simple)
 
 DoutF_delta_chains = fit_delta.chains[Symbol("d[2]")];
 DoutF_delta = mean(DoutF_delta_chains)
-
+# println(f"DoutF_delta = {DoutF_delta:.4f}")
 
 if do_waic_comparison
     df_comparison_delta, fig_comparison_waic_delta = compute_and_plot_WAICs(
@@ -280,6 +286,83 @@ if do_waic_comparison
 
     savefigs && CairoMakie.save("figs/delta_comparison_waic.pdf", fig_comparison_waic_delta)
 end
+
+
+
+fit_delta_Sir2 = Fit(;
+    name = "delta_Sir2_2D_simple",
+    model = diffusion_2D_simple(df_Δ_delta_Sir2.Δ),
+    N_samples,
+    N_chains,
+)
+add_chains!(fit_delta_Sir2; hide_warnings = true, forced, verbose)
+
+
+variables = get_variables_in_group(fit_delta_Sir2.chains, (:d, :θ))
+fig_delta_Sir2_2D_simple = plot_chains(fit_delta_Sir2; variables = variables)
+savefigs && CairoMakie.save("figs/delta_Sir2_2D_simple.pdf", fig_delta_Sir2_2D_simple)
+
+
+DoutF_delta_Sir2_chains = fit_delta_Sir2.chains[Symbol("d[2]")];
+DoutF_delta_Sir2 = mean(DoutF_delta_Sir2_chains)
+# println(f"DoutF_delta_Sir2 = {DoutF_delta_Sir2:.4f}")
+
+
+if do_waic_comparison
+    df_comparison_delta_Sir2, fig_comparison_waic_delta_Sir2 = compute_and_plot_WAICs(
+        df_Δ_delta_Sir2,
+        "delta_Sir2";
+        N_samples,
+        N_chains,
+        hide_warnings = true,
+        forced,
+        verbose,
+    )
+
+    savefigs && CairoMakie.save(
+        "figs/delta_Sir2_comparison_waic.pdf",
+        fig_comparison_waic_delta_Sir2,
+    )
+end
+
+
+fit_delta_Sir4 = Fit(;
+    name = "delta_Sir4_2D_simple",
+    model = diffusion_2D_simple(df_Δ_delta_Sir4.Δ),
+    N_samples,
+    N_chains,
+)
+add_chains!(fit_delta_Sir4; hide_warnings = true, forced, verbose)
+
+
+variables = get_variables_in_group(fit_delta_Sir4.chains, (:d, :θ))
+fig_delta_Sir4_2D_simple = plot_chains(fit_delta_Sir4; variables = variables)
+savefigs && CairoMakie.save("figs/delta_Sir4_2D_simple.pdf", fig_delta_Sir4_2D_simple)
+
+
+DoutF_delta_Sir4_chains = fit_delta_Sir4.chains[Symbol("d[2]")];
+DoutF_delta_Sir4 = mean(DoutF_delta_Sir4_chains)
+# print(f"DoutF_delta_Sir4 = {DoutF_delta_Sir4:.4f}")
+
+
+if do_waic_comparison
+    df_comparison_delta_Sir4, fig_comparison_waic_delta_Sir4 = compute_and_plot_WAICs(
+        df_Δ_delta_Sir4,
+        "delta_Sir4";
+        N_samples,
+        N_chains,
+        hide_warnings = true,
+        forced,
+        verbose,
+    )
+
+    savefigs && CairoMakie.save(
+        "figs/delta_Sir4_comparison_waic.pdf",
+        fig_comparison_waic_delta_Sir4,
+    )
+end
+
+
 
 ###############################################################################
 #
