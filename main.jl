@@ -273,6 +273,12 @@ DoutF_delta_chains = fit_delta.chains[Symbol("d[2]")];
 DoutF_delta = mean(DoutF_delta_chains)
 # println(f"DoutF_delta = {DoutF_delta:.4f}")
 
+
+DoutF_slow_delta_chains = fit_delta.chains[Symbol("d[1]")];
+DoutF_slow_delta = mean(DoutF_slow_delta_chains)
+# println(f"DoutF_slow_delta = {DoutF_slow_delta:.4f}")
+
+
 if do_waic_comparison
     df_comparison_delta, fig_comparison_waic_delta = compute_and_plot_WAICs(
         df_Δ_delta,
@@ -306,6 +312,10 @@ savefigs && CairoMakie.save("figs/delta_Sir2_2D_simple.pdf", fig_delta_Sir2_2D_s
 DoutF_delta_Sir2_chains = fit_delta_Sir2.chains[Symbol("d[2]")];
 DoutF_delta_Sir2 = mean(DoutF_delta_Sir2_chains)
 # println(f"DoutF_delta_Sir2 = {DoutF_delta_Sir2:.4f}")
+
+DoutF_slow_delta_Sir2_chains = fit_delta_Sir2.chains[Symbol("d[1]")];
+DoutF_slow_delta_Sir2 = mean(DoutF_slow_delta_Sir2_chains)
+# println(f"DoutF_slow_delta_Sir2 = {DoutF_slow_delta_Sir2:.4f}")
 
 
 if do_waic_comparison
@@ -343,6 +353,11 @@ savefigs && CairoMakie.save("figs/delta_Sir4_2D_simple.pdf", fig_delta_Sir4_2D_s
 DoutF_delta_Sir4_chains = fit_delta_Sir4.chains[Symbol("d[2]")];
 DoutF_delta_Sir4 = mean(DoutF_delta_Sir4_chains)
 # print(f"DoutF_delta_Sir4 = {DoutF_delta_Sir4:.4f}")
+
+DoutF_slow_delta_Sir4_chains = fit_delta_Sir4.chains[Symbol("d[1]")];
+DoutF_slow_delta_Sir4 = mean(DoutF_slow_delta_Sir4_chains)
+# println(f"DoutF_slow_delta_Sir4 = {DoutF_slow_delta_Sir4:.4f}")
+
 
 
 if do_waic_comparison
