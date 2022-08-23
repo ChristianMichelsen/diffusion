@@ -70,6 +70,10 @@ delta_files = get_list("Sir3-Halo-Sir2DSir4D_Judith_Cleaned")
 delta_Sir2_files = get_list("Sir3-Halo-Sir2D_Judith_Cleaned")
 delta_Sir4_files = get_list("Sir3-Halo-Sir4D_Judith_Cleaned")
 
+# hyper
+hyper_WT_files = get_list("hyperclusters/Sir3-Halo-Gal1_Single_Molecules--HYPER")
+hyper_focus_files = get_list("hyperclusters/Sirs-Halo-Gal1_Focus--HYPER")
+
 
 df_WT1 = load_cells(WT1_files)
 df_WT2 = load_cells(WT2_files)
@@ -81,6 +85,8 @@ df_delta = load_cells(delta_files)
 df_delta_Sir2 = load_cells(delta_Sir2_files)
 df_delta_Sir4 = load_cells(delta_Sir4_files)
 
+df_delta_hyper_WT = load_cells(hyper_WT_files)
+df_delta_hyper_focus = load_cells(hyper_focus_files)
 
 
 df_Δ_WT1 = compute_dist(df_WT1)
@@ -92,6 +98,10 @@ df_Δ_rad = compute_dist(df_rad)
 df_Δ_delta = compute_dist(df_delta)
 df_Δ_delta_Sir2 = compute_dist(df_delta_Sir2)
 df_Δ_delta_Sir4 = compute_dist(df_delta_Sir4)
+
+df_Δ_hyper_WT = compute_dist(df_delta_hyper_WT)
+df_Δ_hyper_focus = compute_dist(df_delta_hyper_focus)
+
 
 
 ###############################################################################
@@ -453,3 +463,189 @@ savefigs && CairoMakie.save("figs/U_right.pdf", fig_U_right)
 
 fig_Us = plot_Us([U_lefts, U_rights], ["left", "right"])
 savefigs && CairoMakie.save("figs/Us.pdf", fig_Us);
+
+
+
+#%%
+
+###############################################################################
+#
+#                ██   ██ ██    ██ ██████  ███████ ██████
+#                ██   ██  ██  ██  ██   ██ ██      ██   ██
+#                ███████   ████   ██████  █████   ██████
+#                ██   ██    ██    ██      ██      ██   ██
+#                ██   ██    ██    ██      ███████ ██   ██
+#
+###############################################################################
+
+# # WT1 -> Hyper
+# # eventuelt ogsaa:
+# # focus -> hyperfocus
+
+
+fit_hyper_WT = Fit(;
+    name = "hyper_WT_2D_simple",
+    model = diffusion_2D_simple(df_Δ_hyper_WT.Δ),
+    N_samples,
+    N_chains,
+)
+add_chains!(fit_hyper_WT; hide_warnings = true, forced, verbose)
+
+variables = get_variables_in_group(fit_hyper_WT, (:d, :θ))
+fig_hyper_WT_2D_simple = plot_chains(fit_hyper_WT; variables = variables)
+savefigs && CairoMakie.save("figs/hyper_WT_2D_simple.pdf", fig_hyper_WT_2D_simple)
+
+
+Din_hyper_WT_chains = fit_hyper_WT.chains[Symbol("d[1]")];
+Din_hyper_WT = mean(Din_hyper_WT_chains)
+Derr_hyper_WT = std(Din_hyper_WT_chains)
+println(f"Din_hyper_WT = {Din_hyper_WT:.5f} ± {Derr_hyper_WT:.5f}")
+
+##
+
+df_MSD_hyper_WT = compute_MSD(hyper_WT_files, L_MAX, Din_hyper_WT, Derr_hyper_WT)
+
+
+fit_hyper_WT_MSD = Fit(;
+    name = "hyper_WT_MSD",
+    model = diffusion_MSD(xM, df_MSD_hyper_WT[:, "mean"], df_MSD_hyper_WT[:, "sdom"]),
+    N_samples,
+    N_chains,
+)
+add_chains!(fit_hyper_WT_MSD; hide_warnings = true, forced, verbose)
+
+
+fig_hyper_WT_MSD = plot_chains(fit_hyper_WT_MSD)
+savefigs && CairoMakie.save("figs/hyper_WT_MSD.pdf", fig_hyper_WT_MSD)
+
+fig_hyper_WT_MSD_corner = corner(fit_hyper_WT_MSD.chains)
+savefigs && CairoMakie.save("figs/hyper_WT_MSD_corner.pdf", fig_hyper_WT_MSD_corner)
+
+
+# R_inf_hyper_WT = sqrt(2) * mean(fit_hyper_WT_MSD.chains[:R_inf])
+DCon1_hyper_WT_chains = fit_hyper_WT_MSD.chains[:d];
+DCon1_hyper_WT = mean(DCon1_hyper_WT_chains)
+DCon1_hyper_WT_err = std(DCon1_hyper_WT_chains)
+
+fit_hyper_WT_polynomial = Fit(;
+    name = "hyper_WT_polynomial",
+    model = bayesian_OLS(
+        xM[1:3],
+        df_MSD_hyper_WT[1:3, "mean"],
+        df_MSD_hyper_WT[1:3, "sdom"],
+    ),
+    N_samples,
+    N_chains,
+)
+add_chains!(fit_hyper_WT_polynomial; merge_chains = false, forced, verbose)
+
+
+DCon2_hyper_WT_chains = fit_hyper_WT_polynomial.chains[:a] ./ 2;
+DCon2_hyper_WT = mean(DCon2_hyper_WT_chains)
+DCon2_hyper_WT_err = std(DCon2_hyper_WT_chains)
+
+# fx_hyper_WT = fit_polynomial(xM[1:3], df_MSD_hyper_WT[1:3, "mean"], 1)
+# DCon2_hyper_WT = fx_hyper_WT[1] / 2.0
+println(f"DCon1_hyper_WT = {DCon1_hyper_WT:.5f} ± {DCon1_hyper_WT_err:.5f}")
+println(f"DCon2_hyper_WT = {DCon2_hyper_WT:.7f} ± {DCon2_hyper_WT_err:.7f}")
+
+
+if do_waic_comparison
+    df_comparison_hyper_WT, fig_comparison_waic_hyper_WT = compute_and_plot_WAICs(
+        df_Δ_hyper_WT,
+        "hyper_WT";
+        N_samples,
+        N_chains,
+        hide_warnings = true,
+        forced,
+        verbose,
+    )
+
+    savefigs &&
+        CairoMakie.save("figs/hyper_WT_comparison_waic.pdf", fig_comparison_waic_hyper_WT)
+end
+
+
+
+
+fit_hyper_focus = Fit(;
+    name = "hyper_focus_2D_simple",
+    model = diffusion_2D_simple(df_Δ_hyper_focus.Δ),
+    N_samples,
+    N_chains,
+)
+add_chains!(fit_hyper_focus; hide_warnings = true, forced, verbose)
+
+
+variables = get_variables_in_group(fit_hyper_focus.chains, (:d, :θ))
+fig_hyper_focus_2D_simple = plot_chains(fit_hyper_focus; variables = variables)
+savefigs && CairoMakie.save("figs/hyper_focus_2D_simple.pdf", fig_hyper_focus_2D_simple)
+
+
+Din_hyper_focus = fit_hyper_focus.chains[Symbol("d[1]")];
+df_MSD_hyper_focus =
+    compute_MSD(hyper_focus_files, L_MAX, mean(Din_hyper_focus), std(Din_hyper_focus))
+
+
+fit_hyper_focus_polynomial = Fit(;
+    name = "hyper_focus_polynomial",
+    model = bayesian_OLS(
+        xM[1:3],
+        df_MSD_hyper_focus[1:3, "mean"],
+        df_MSD_hyper_focus[1:3, "sdom"],
+    ),
+    N_samples,
+    N_chains,
+)
+add_chains!(fit_hyper_focus_polynomial; merge_chains = false, forced, verbose)
+
+
+Db_hyper_focus_chains = fit_hyper_focus_polynomial.chains[:a] ./ 2;
+Db_hyper_focus = mean(Db_hyper_focus_chains)
+Db_hyper_focus_err = std(Db_hyper_focus_chains)
+println(f"Db_hyper_focus = {Db_hyper_focus:.7f} ± {Db_hyper_focus_err:.7f}")
+
+
+if do_waic_comparison
+    df_comparison_hyper_focus, fig_comparison_waic_hyper_focus = compute_and_plot_WAICs(
+        df_Δ_hyper_focus,
+        "hyper_focus";
+        N_samples,
+        N_chains,
+        hide_warnings = true,
+        forced,
+        verbose,
+    )
+
+    savefigs && CairoMakie.save(
+        "figs/hyper_focus_comparison_waic.pdf",
+        fig_comparison_waic_hyper_focus,
+    )
+end
+
+
+
+U_lefts_hyper_WT = compute_U_left.(fit_hyper_WT.chains[Symbol("θ[1]")]);
+U_rights_hyper =
+    compute_U_right.(DCon2_hyper_WT_chains, Db_hyper_focus_chains, DoutF_delta_chains);
+
+
+println(f"U left (hyper WT) = {mean(U_lefts_hyper_WT):.3f} ± {std(U_lefts_hyper_WT):.3f}")
+println(
+    f"U right (hyper WT, hyper focus) = {mean(U_rights_hyper):.3f} ± {std(U_rights_hyper):.3f}",
+)
+
+
+##
+
+fig_U_left_hyper_WT = plot_U_direction(U_lefts_hyper_WT, "left (hyper WT)")
+savefigs && CairoMakie.save("figs/U_left_hyper_WT.pdf", fig_U_left_hyper_WT)
+
+fig_U_right_hyper = plot_U_direction(U_rights_hyper, "right (hyper WT, hyper focus)")
+savefigs && CairoMakie.save("figs/U_right_hyper.pdf", fig_U_right_hyper)
+
+fig_Us_hyper = plot_Us(
+    [U_lefts_hyper_WT, U_rights_hyper],
+    ["left (hyper WT)", "right (hyper WT, hyper focus)"],
+)
+savefigs && CairoMakie.save("figs/Us_hyper.pdf", fig_Us_hyper);
