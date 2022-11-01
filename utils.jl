@@ -146,7 +146,7 @@ end
 
 
 
-function make_df_MSD(squared_dists, Ns)
+function make_df_MSD(squared_dists, Ns, L_MAX)
 
     MSD_mean = zeros(L_MAX)
     MSD_std = zeros(L_MAX)
@@ -196,7 +196,7 @@ function compute_MSD(files, L_MAX, Dintmp, Dstmp, Typ = 0)
         end
     end
 
-    df_MSD = make_df_MSD(squared_dists, Ns)
+    df_MSD = make_df_MSD(squared_dists, Ns, L_MAX)
     return df_MSD
 end
 
@@ -324,7 +324,20 @@ function plot_Us(Us, directions; resolution = (1_000, 600))
         end
     end
 
-    CairoMakie.axislegend(ax; merge=true)
+    CairoMakie.axislegend(ax; merge = true)
     return fig
 
+end
+
+
+
+##
+
+function plot_MSD(df_MSD; title = "")
+    fig = CairoMakie.Figure(; resolution = (1_000, 600))
+    ax = CairoMakie.Axis(fig[1, 1]; ylabel = "MSD", title = title)
+    xs = 1:size(df_MSD, 1)
+    CairoMakie.errorbars!(ax, xs, df_MSD[:, "mean"], df_MSD[:, "sdom"]; label = "mean")
+    ax.xlabel = "Iteration"
+    return fig
 end

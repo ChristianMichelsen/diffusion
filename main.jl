@@ -504,7 +504,15 @@ println(f"Din_hyper_WT = {Din_hyper_WT:.5f} ± {Derr_hyper_WT:.5f}")
 ##
 
 df_MSD_hyper_WT = compute_MSD(hyper_WT_files, L_MAX, Din_hyper_WT, Derr_hyper_WT)
+# df_MSD_hyper_WT = compute_MSD(hyper_WT_files, 20, Din_hyper_WT, Derr_hyper_WT)
 
+
+##
+
+# plot_MSD(compute_MSD(hyper_WT_files, 20, Din_hyper_WT, Derr_hyper_WT); title="Hyper")
+# plot_MSD(compute_MSD(WT1_files, 20, Din_WT1, Derr_WT1); title= "WT1")
+
+##
 
 fit_hyper_WT_MSD = Fit(;
     name = "hyper_WT_MSD",
